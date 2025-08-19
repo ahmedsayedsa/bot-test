@@ -143,6 +143,39 @@ async function startBot() {
                 const text = message.message.conversation || 
                            message.message.extendedTextMessage?.text || "";
                 
+                // معالجة Poll Votes (إجابات الاستفتاء)  
+                const pollUpdate = message.message.pollUpdateMessage;
+                const pollCreation = message.message.pollCreationMessage;
+                
+                if (pollUpdate) {
+                    try {
+                        // استخراج إجابة الاستفتاء
+                        const vote = pollUpdate.vote;
+                        if (vote && vote.selectedOptions && vote.selectedOptions.length > 0) {
+                            const selectedOption = vote.selectedOptions[0];
+                            const customerPhone = message.key.remoteJid.replace('@s.whatsapp.net', '');
+                            
+                            console.log(`🗳️ استفتاء: العميل ${customerPhone} اختار: ${selectedOption}`);
+                            
+                            if (selectedOption === 0) { // ✅ تأكيد الطلب
+                                await sock.sendMessage(message.key.remoteJid, { 
+                                    text: "✅ شكراً لك! تم تأكيد طلبك بنجاح من خلال الاستفتاء!\n\n🚚 سيتم تجهيز طلبك والتواصل معك قريباً.\n\n🙏 شكراً لثقتك في اوتو سيرفس!" 
+                                });
+                                await updateOrderStatus(customerPhone, 'confirmed', 'تم تأكيد الطلب عبر الاستفتاء');
+                                
+                            } else if (selectedOption === 1) { // ❌ إلغاء الطلب  
+                                await sock.sendMessage(message.key.remoteJid, { 
+                                    text: "❌ تم إلغاء طلبك بناءً على اختيارك في الاستفتاء.\n\n😔 نتمنى خدمتك في المستقبل!\n\n💡 يمكنك الطلب مرة أخرى في أي وقت." 
+                                });
+                                await updateOrderStatus(customerPhone, 'cancelled', 'تم إلغاء الطلب عبر الاستفتاء');
+                            }
+                            return; // انتهى من معالجة الاستفتاء
+                        }
+                    } catch (pollError) {
+                        console.error('❌ خطأ في معالجة الاستفتاء:', pollError);
+                    }
+                }
+                
                 // معالجة الرد على جميع أنواع الأزرار والقوائم
                 const buttonResponseMessage = message.message.buttonsResponseMessage;
                 const listResponseMessage = message.message.listResponseMessage;
@@ -204,26 +237,46 @@ async function startBot() {
                     }
                 }
                 
-                // معالجة الرسائل النصية العادية (للتوافق مع الطريقة القديمة)
-                else if (text.toLowerCase().includes("موافق") || text.toLowerCase().includes("تم")) {
+                // معالجة الردود النصية (مع كلمات أكثر تنوعاً)
+                else if (text && text.trim()) {
+                    const lowerText = text.toLowerCase().trim();
                     const customerPhone = message.key.remoteJid.replace('@s.whatsapp.net', '');
                     
-                    await sock.sendMessage(message.key.remoteJid, { 
-                        text: "✅ تم تأكيد طلبك بنجاح! سيتم التحضير والتوصيل قريباً. شكراً لثقتك 🙏" 
-                    });
+                    // كلمات التأكيد
+                    const confirmWords = ['موافق', 'تم', 'نعم', 'yes', 'ok', 'أوافق', 'اوافق', 'موافقه', 'تمام', 'اوكي', 'حاضر', 'ماشي', 'صح'];
+                    // كلمات الإلغاء
+                    const cancelWords = ['إلغاء', 'الغاء', 'لا', 'no', 'رفض', 'مش موافق', 'لأ', 'لاء', 'مش عايز', 'مش عاوز', 'cancel'];
                     
-                    await updateOrderStatus(customerPhone, 'confirmed', 'تم تأكيد الطلب نصياً من العميل');
-                    console.log("✅ تم تأكيد الطلب نصياً");
+                    const isConfirm = confirmWords.some(word => lowerText.includes(word));
+                    const isCancel = cancelWords.some(word => lowerText.includes(word));
                     
-                } else if (text.toLowerCase().includes("الغاء") || text.toLowerCase().includes("إلغاء")) {
-                    const customerPhone = message.key.remoteJid.replace('@s.whatsapp.net', '');
-                    
-                    await sock.sendMessage(message.key.remoteJid, { 
-                        text: "❌ تم إلغاء طلبك. نأسف لعدم تمكننا من خدمتك هذه المرة 😔" 
-                    });
-                    
-                    await updateOrderStatus(customerPhone, 'cancelled', 'تم إلغاء الطلب نصياً من العميل');
-                    console.log("❌ تم إلغاء الطلب نصياً");
+                    if (isConfirm) {
+                        await sock.sendMessage(message.key.remoteJid, { 
+                            text: "✅ ممتاز! تم تأكيد طلبك بنجاح!\n\n🚚 سيتم تجهيز طلبك خلال 1-2 يوم عمل.\n📞 سنتواصل معك لترتيب موعد التوصيل.\n\n🙏 شكراً لثقتك في اوتو سيرفس!" 
+                        });
+                        
+                        await updateOrderStatus(customerPhone, 'confirmed', `تم تأكيد الطلب نصياً: "${text}"`);
+                        console.log(`✅ تم تأكيد الطلب نصياً: "${text}"`);
+                        
+                    } else if (isCancel) {
+                        await sock.sendMessage(message.key.remoteJid, { 
+                            text: "❌ تم إلغاء طلبك كما طلبت.\n\n😔 نأسف لعدم تمكننا من خدمتك هذه المرة.\n💡 يمكنك الطلب مرة أخرى في أي وقت.\n\n🤝 نتطلع لخدمتك قريباً!" 
+                        });
+                        
+                        await updateOrderStatus(customerPhone, 'cancelled', `تم إلغاء الطلب نصياً: "${text}"`);
+                        console.log(`❌ تم إلغاء الطلب نصياً: "${text}"`);
+                        
+                    } else {
+                        // رسالة غير واضحة - طلب توضيح
+                        await sock.sendMessage(message.key.remoteJid, { 
+                            text: `🤔 عذراً، لم أفهم ردك: "${text}"\n\n` +
+                                  `📝 يرجى الرد بأحد الخيارات التالية:\n\n` +
+                                  `✅ للتأكيد: "موافق" أو "نعم" أو "تم"\n` +
+                                  `❌ للإلغاء: "إلغاء" أو "لا" أو "رفض"\n\n` +
+                                  `🤖 شكراً لصبرك!`
+                        });
+                        console.log(`❓ رد غير واضح من ${customerPhone}: "${text}"`);
+                    }
                 }
             } catch (msgError) {
                 console.error('❌ خطأ في معالجة الرسالة:', msgError);
@@ -457,164 +510,164 @@ app.post("/webhook", async (req, res) => {
         console.log(`📞 الرقم المنسق: ${formattedNumber}`);
         console.log("📤 محاولة إرسال الرسالة مع الأزرار...");
 
-        // جربة عدة طرق للأزرار
+        // تجربة Quick Reply Buttons (الأكثر توافقاً)
         let buttonsSent = false;
 
-        // الطريقة الأولى: Interactive Message (الأحدث)
+        // الطريقة الأولى: Quick Reply مع Baileys الحديث
         try {
-            const interactiveMessage = {
-                interactiveMessage: {
-                    body: { text: message },
-                    footer: { text: '🤖 اوتو سيرفس - اختر أحد الخيارات' },
-                    nativeFlowMessage: {
-                        buttons: [
-                            {
-                                name: "quick_reply",
-                                buttonParamsJson: JSON.stringify({
-                                    display_text: "✅ تأكيد الطلب",
-                                    id: "confirm_order"
-                                })
-                            },
-                            {
-                                name: "quick_reply", 
-                                buttonParamsJson: JSON.stringify({
-                                    display_text: "❌ إلغاء الطلب",
-                                    id: "cancel_order"
-                                })
-                            }
-                        ]
+            const quickReplyMessage = {
+                text: message,
+                contextInfo: {
+                    mentionedJid: [],
+                    quotedMessage: null,
+                    isForwarded: false
+                },
+                buttons: [
+                    {
+                        type: 'replyButton',
+                        reply: {
+                            id: 'confirm_order',
+                            title: '✅ تأكيد الطلب'
+                        }
+                    },
+                    {
+                        type: 'replyButton', 
+                        reply: {
+                            id: 'cancel_order',
+                            title: '❌ إلغاء الطلب'
+                        }
                     }
-                }
+                ],
+                headerType: 'TEXT',
+                contentText: message,
+                footerText: '🤖 اوتو سيرفس - اضغط أحد الأزرار'
             };
             
-            await sock.sendMessage(formattedNumber, interactiveMessage);
-            console.log(`✅ تم إرسال Interactive Message بنجاح`);
+            await sock.sendMessage(formattedNumber, { buttonsMessage: quickReplyMessage });
+            console.log(`✅ تم إرسال Quick Reply Message بنجاح`);
             buttonsSent = true;
             
-        } catch (interactiveError) {
-            console.log(`❌ فشل Interactive Message:`, interactiveError.message);
+        } catch (quickReplyError) {
+            console.log(`❌ فشل Quick Reply:`, quickReplyError.message);
         }
 
-        // الطريقة الثانية: Template Buttons (إذا فشلت الأولى)
-        if (!buttonsSent) {
-            try {
-                const templateMessage = {
-                    templateMessage: {
-                        hydratedTemplate: {
-                            hydratedContentText: message,
-                            hydratedFooterText: '🤖 اوتو سيرفس',
-                            hydratedButtons: [
-                                {
-                                    quickReplyButton: {
-                                        displayText: '✅ تأكيد الطلب',
-                                        id: 'confirm_order'
-                                    }
-                                },
-                                {
-                                    quickReplyButton: {
-                                        displayText: '❌ إلغاء الطلب', 
-                                        id: 'cancel_order'
-                                    }
-                                }
-                            ]
-                        }
-                    }
-                };
-                
-                await sock.sendMessage(formattedNumber, templateMessage);
-                console.log(`✅ تم إرسال Template Message بنجاح`);
-                buttonsSent = true;
-                
-            } catch (templateError) {
-                console.log(`❌ فشل Template Message:`, templateError.message);
-            }
-        }
-
-        // الطريقة الثالثة: Button Message التقليدية
-        if (!buttonsSent) {
-            try {
-                const buttonMessage = {
-                    text: message,
-                    buttons: [
-                        {
-                            buttonId: 'confirm_order',
-                            buttonText: { displayText: '✅ تأكيد الطلب' },
-                            type: 1
-                        },
-                        {
-                            buttonId: 'cancel_order',
-                            buttonText: { displayText: '❌ إلغاء الطلب' },
-                            type: 1
-                        }
-                    ],
-                    headerType: 1,
-                    footer: '🤖 اوتو سيرفس - اختر أحد الأزرار'
-                };
-                
-                await sock.sendMessage(formattedNumber, buttonMessage);
-                console.log(`✅ تم إرسال Button Message بنجاح`);
-                buttonsSent = true;
-                
-            } catch (buttonError) {
-                console.log(`❌ فشل Button Message:`, buttonError.message);
-            }
-        }
-
-        // الطريقة الرابعة: List Message  
+        // الطريقة الثانية: Interactive List (أكثر موثوقية)
         if (!buttonsSent) {
             try {
                 const listMessage = {
-                    text: message,
-                    listMessage: {
-                        title: "اختيار العملية",
-                        description: "اضغط على القائمة واختر",
-                        sections: [
-                            {
-                                title: "خيارات الطلب",
-                                rows: [
-                                    {
-                                        title: "✅ تأكيد الطلب",
-                                        description: "أوافق على الطلب وأريد المتابعة",
-                                        rowId: "confirm_order"
-                                    },
-                                    {
-                                        title: "❌ إلغاء الطلب", 
-                                        description: "أريد إلغاء هذا الطلب",
-                                        rowId: "cancel_order"
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    footer: "🤖 اوتو سيرفس"
+                    text: message + '\n\n👇 اضغط على "خيارات الطلب" أسفل لاختيار ما تريد',
+                    buttonText: 'خيارات الطلب',
+                    sections: [
+                        {
+                            title: '📋 اختر العملية المطلوبة',
+                            rows: [
+                                {
+                                    title: '✅ تأكيد الطلب',
+                                    description: 'أوافق على الطلب وأريد المتابعة',
+                                    rowId: 'confirm_order'
+                                },
+                                {
+                                    title: '❌ إلغاء الطلب',
+                                    description: 'أريد إلغاء هذا الطلب نهائياً',
+                                    rowId: 'cancel_order'
+                                }
+                            ]
+                        }
+                    ],
+                    listType: 'SINGLE_SELECT'
                 };
                 
-                await sock.sendMessage(formattedNumber, listMessage);
-                console.log(`✅ تم إرسال List Message بنجاح`);
+                await sock.sendMessage(formattedNumber, { listMessage: listMessage });
+                console.log(`✅ تم إرسال Interactive List بنجاح`);
                 buttonsSent = true;
                 
             } catch (listError) {
-                console.log(`❌ فشل List Message:`, listError.message);
+                console.log(`❌ فشل Interactive List:`, listError.message);
             }
         }
 
-        // الطريقة الأخيرة: رسالة عادية مع خيارات نصية
+        // الطريقة الثالثة: Location Request مع أزرار مخفية (تجريبية)
         if (!buttonsSent) {
-            console.log(`⚠️ فشل جميع طرق الأزرار، سنرسل رسالة نصية مع خيارات`);
+            try {
+                // إرسال رسالة عادية أولاً
+                await sock.sendMessage(formattedNumber, { text: message });
+                
+                // ثم إرسال رسالة منفصلة مع خيارات سريعة
+                const quickOptions = {
+                    text: '🎯 اختر رد سريع:\n\n' +
+                          '🟢 اكتب: نعم\n' +
+                          '🔴 اكتب: لا\n\n' +
+                          'أو اختر من الأزرار أدناه ⬇️',
+                    templateButtons: [
+                        {
+                            index: 1,
+                            quickReplyButton: {
+                                displayText: '✅ نعم، أوافق',
+                                id: 'confirm_order'
+                            }
+                        },
+                        {
+                            index: 2,
+                            quickReplyButton: {
+                                displayText: '❌ لا، إلغاء',
+                                id: 'cancel_order'  
+                            }
+                        }
+                    ]
+                };
+                
+                await sock.sendMessage(formattedNumber, { templateMessage: { hydratedTemplate: quickOptions } });
+                console.log(`✅ تم إرسال Template Buttons بنجاح`);
+                buttonsSent = true;
+                
+            } catch (templateError) {
+                console.log(`❌ فشل Template Buttons:`, templateError.message);
+            }
+        }
+
+        // الطريقة الرابعة: Poll Message (استفتاء)
+        if (!buttonsSent) {
+            try {
+                const pollMessage = {
+                    name: 'قرار الطلب - اختر إجابة واحدة',
+                    options: ['✅ تأكيد الطلب', '❌ إلغاء الطلب'],
+                    selectableOptionsCount: 1
+                };
+                
+                // إرسال الرسالة الأساسية أولاً
+                await sock.sendMessage(formattedNumber, { text: message });
+                
+                // ثم إرسال الاستفتاء
+                await sock.sendMessage(formattedNumber, { 
+                    poll: pollMessage 
+                });
+                console.log(`✅ تم إرسال Poll Message بنجاح`);
+                buttonsSent = true;
+                
+            } catch (pollError) {
+                console.log(`❌ فشل Poll Message:`, pollError.message);
+            }
+        }
+
+        // الطريقة الأخيرة: رسالة نصية منسقة مع Emojis
+        if (!buttonsSent) {
+            console.log(`⚠️ جميع الأزرار فشلت، سنرسل رسالة منسقة بطريقة جذابة`);
             
-            const fallbackMessage = message + 
-                '\n\n┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓\n' +
-                '┃        🎛️ خيارات الطلب        ┃\n' +
-                '┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫\n' +
-                '┃                                      ┃\n' +
-                '┃  ✅ للتأكيد: اكتب "موافق"     ┃\n' +
-                '┃  ❌ للإلغاء: اكتب "إلغاء"      ┃\n' +
-                '┃                                      ┃\n' +
-                '┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛\n\n' +
-                '🤖 رد تلقائي من اوتو سيرفس';
+            const styledMessage = message + 
+                '\n\n' +
+                '═════════════════════════════\n' +
+                '          🎯 خيارات الطلب          \n' +
+                '═════════════════════════════\n\n' +
+                '🟢 للتأكيد والموافقة:\n' +
+                '   📱 اكتب: "موافق" أو "نعم" أو "تم"\n\n' +
+                '🔴 للإلغاء والرفض:\n' +
+                '   📱 اكتب: "إلغاء" أو "لا" أو "رفض"\n\n' +
+                '═════════════════════════════\n' +
+                '🤖 رد تلقائي من اوتو سيرفس\n' +
+                '⚡ الرد السريع يسرّع المعالجة';
             
-            await sock.sendMessage(formattedNumber, { text: fallbackMessage });
-            console.log(`✅ تم إرسال رسالة نصية مع خيارات منسقة`);
+            await sock.sendMessage(formattedNumber, { text: styledMessage });
+            console.log(`✅ تم إرسال رسالة منسقة بطريقة جذابة`);
         }
 
         // تحديث الاستجابة لتتضمن معلومات الطلب
