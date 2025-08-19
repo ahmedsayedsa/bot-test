@@ -9,7 +9,6 @@ let isWhatsappConnected = false;
 let qrCodeData = null;
 
 async function startBot() {
-    // حذف مجلد auth_info عند كل تشغيل لضمان جلسة جديدة
     if (fs.existsSync("auth_info")) {
         console.log("⚠️ تم حذف مجلد auth_info لبدء جلسة جديدة.");
         fs.rmSync("auth_info", { recursive: true, force: true });
@@ -38,7 +37,6 @@ async function startBot() {
         if (connection === 'close') {
             console.log('❌ الاتصال مقطوع، محاولة إعادة الاتصال...');
             isWhatsappConnected = false;
-            // تأخير 5 ثوانٍ قبل إعادة التشغيل لمنع خطأ EADDRINUSE
             setTimeout(() => startBot(), 5000); 
         } else if (connection === 'open') {
             console.log('✅ البوت متصل بنجاح!');
