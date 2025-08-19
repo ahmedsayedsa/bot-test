@@ -1,31 +1,14 @@
-// Package.json المطلوب:
-/*
-{
-  "name": "whatsapp-easyorder-bot",
-  "version": "1.0.0",
-  "main": "index.js",
-  "scripts": {
-    "start": "node index.js"
-  },
-  "dependencies": {
-    "express": "^4.18.2",
-    "body-parser": "^1.20.2",
-    "@whiskeysockets/baileys": "^6.4.0",
-    "qrcode": "^1.5.3",
-    "crypto": "^1.0.1"
-  },
-  "engines": {
-    "node": "18.x"
-  }
-}
-*/
+// استيراد المكتبات المطلوبة
+const express = require("express"); // إضافة هذا السطر المفقود!
 const bodyParser = require("body-parser");
 const fs = require("fs");
 const crypto = require("crypto");
 
 // إضافة crypto polyfill للـ global scope
 global.crypto = crypto;
-global.crypto.webcrypto = crypto.webcrypto;
+if (crypto.webcrypto) {
+    global.crypto.webcrypto = crypto.webcrypto;
+}
 
 const makeWASocket = require("@whiskeysockets/baileys").default;
 const { useMultiFileAuthState, fetchLatestBaileysVersion } = require("@whiskeysockets/baileys");
@@ -51,7 +34,6 @@ async function startBot() {
             defaultQueryTimeoutMs: 0,
             keepAliveIntervalMs: 10000,
             markOnlineOnConnect: false,
-            // إضافة إعدادات للـ crypto
             generateHighQualityLinkPreview: false,
             syncFullHistory: false,
             logger: {
@@ -87,8 +69,12 @@ async function startBot() {
                     setTimeout(() => startBot(), 10000);
                 } else {
                     console.log('❌ البوت محتاج تسجيل دخول جديد');
-                    if (fs.existsSync("auth_info")) {
-                        fs.rmSync("auth_info", { recursive: true, force: true });
+                    try {
+                        if (fs.existsSync("auth_info")) {
+                            fs.rmSync("auth_info", { recursive: true, force: true });
+                        }
+                    } catch (cleanupError) {
+                        console.error('❌ خطأ في حذف auth_info:', cleanupError);
                     }
                     setTimeout(() => startBot(), 5000);
                 }
@@ -98,8 +84,12 @@ async function startBot() {
                 qrCodeData = null;
                 
                 // حذف ملف QR بعد الاتصال
-                if (fs.existsSync('qr.txt')) {
-                    fs.unlinkSync('qr.txt');
+                try {
+                    if (fs.existsSync('qr.txt')) {
+                        fs.unlinkSync('qr.txt');
+                    }
+                } catch (deleteError) {
+                    console.error('❌ خطأ في حذف QR file:', deleteError);
                 }
             } else if (connection === 'connecting') {
                 console.log('🔄 جاري الاتصال بواتساب...');
@@ -141,8 +131,23 @@ async function startBot() {
 
 // إعداد Express
 const app = express();
-app.use(bodyParser.json({ limit: '50mb' }));
-app.use(bodyParser.urlencoded({ extended: true }));
+
+// إضافة middleware للأمان والتعامل مع الطلبات
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// إضافة CORS headers
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    
+    if (req.method === 'OPTIONS') {
+        res.sendStatus(200);
+    } else {
+        next();
+    }
+});
 
 // Middleware لتسجيل جميع الطلبات
 app.use((req, res, next) => {
@@ -152,93 +157,107 @@ app.use((req, res, next) => {
 
 // Route الرئيسي
 app.get("/", (req, res) => {
-    if (!isWhatsappConnected && qrCodeData) {
-        const html = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>WhatsApp Bot - QR Code</title>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <style>
-                body { 
-                    font-family: Arial, sans-serif; 
-                    display: flex; 
-                    flex-direction: column; 
-                    align-items: center; 
-                    justify-content: center; 
-                    height: 100vh; 
-                    margin: 0; 
-                    background: #f0f0f0; 
-                    text-align: center;
-                }
-                .container { 
-                    background: white; 
-                    padding: 30px; 
-                    border-radius: 10px; 
-                    box-shadow: 0 4px 6px rgba(0,0,0,0.1); 
-                }
-                img { 
-                    border: 2px solid #25D366; 
-                    border-radius: 10px; 
-                    margin: 20px 0; 
-                }
-                .status { 
-                    color: #25D366; 
-                    font-weight: bold; 
-                }
-            </style>
-            <script>
-                // تحديث الصفحة كل 5 ثوان لفحص الاتصال
-                setTimeout(() => window.location.reload(), 5000);
-            </script>
-        </head>
-        <body>
-            <div class="container">
-                <h1>🤖 WhatsApp Bot</h1>
-                <h2>امسح الرمز باستخدام واتساب</h2>
-                <img src="${qrCodeData}" alt="QR Code">
-                <p class="status">🔄 في انتظار المسح...</p>
-                <small>ستتم إعادة تحميل الصفحة تلقائياً</small>
-            </div>
-        </body>
-        </html>`;
-        res.send(html);
-    } else if (isWhatsappConnected) {
-        const html = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>WhatsApp Bot - Connected</title>
-            <meta charset="utf-8">
-            <style>
-                body { 
-                    font-family: Arial, sans-serif; 
-                    display: flex; 
-                    flex-direction: column; 
-                    align-items: center; 
-                    justify-content: center; 
-                    height: 100vh; 
-                    margin: 0; 
-                    background: #25D366; 
-                    color: white; 
-                    text-align: center;
-                }
-            </style>
-        </head>
-        <body>
-            <h1>✅ البوت متصل بنجاح!</h1>
-            <p>🤖 WhatsApp Bot is running and ready to receive orders</p>
-            <p>📱 جاهز لاستقبال الطلبات من Easy Order</p>
-        </body>
-        </html>`;
-        res.send(html);
-    } else {
-        res.json({
-            status: "🔄 Starting...",
-            connected: false,
-            message: "البوت يحاول الاتصال بواتساب..."
-        });
+    try {
+        if (!isWhatsappConnected && qrCodeData) {
+            const html = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>WhatsApp Bot - QR Code</title>
+                <meta charset="utf-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1">
+                <style>
+                    body { 
+                        font-family: Arial, sans-serif; 
+                        display: flex; 
+                        flex-direction: column; 
+                        align-items: center; 
+                        justify-content: center; 
+                        min-height: 100vh; 
+                        margin: 0; 
+                        background: #f0f0f0; 
+                        text-align: center;
+                        padding: 20px;
+                        box-sizing: border-box;
+                    }
+                    .container { 
+                        background: white; 
+                        padding: 30px; 
+                        border-radius: 10px; 
+                        box-shadow: 0 4px 6px rgba(0,0,0,0.1); 
+                        max-width: 400px;
+                        width: 100%;
+                    }
+                    img { 
+                        border: 2px solid #25D366; 
+                        border-radius: 10px; 
+                        margin: 20px 0; 
+                        max-width: 100%;
+                        height: auto;
+                    }
+                    .status { 
+                        color: #25D366; 
+                        font-weight: bold; 
+                    }
+                </style>
+                <script>
+                    // تحديث الصفحة كل 5 ثوان لفحص الاتصال
+                    setTimeout(() => window.location.reload(), 5000);
+                </script>
+            </head>
+            <body>
+                <div class="container">
+                    <h1>🤖 WhatsApp Bot</h1>
+                    <h2>امسح الرمز باستخدام واتساب</h2>
+                    <img src="${qrCodeData}" alt="QR Code">
+                    <p class="status">🔄 في انتظار المسح...</p>
+                    <small>ستتم إعادة تحميل الصفحة تلقائياً</small>
+                </div>
+            </body>
+            </html>`;
+            res.send(html);
+        } else if (isWhatsappConnected) {
+            const html = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>WhatsApp Bot - Connected</title>
+                <meta charset="utf-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1">
+                <style>
+                    body { 
+                        font-family: Arial, sans-serif; 
+                        display: flex; 
+                        flex-direction: column; 
+                        align-items: center; 
+                        justify-content: center; 
+                        min-height: 100vh; 
+                        margin: 0; 
+                        background: #25D366; 
+                        color: white; 
+                        text-align: center;
+                        padding: 20px;
+                        box-sizing: border-box;
+                    }
+                </style>
+            </head>
+            <body>
+                <h1>✅ البوت متصل بنجاح!</h1>
+                <p>🤖 WhatsApp Bot is running and ready to receive orders</p>
+                <p>📱 جاهز لاستقبال الطلبات من Easy Order</p>
+            </body>
+            </html>`;
+            res.send(html);
+        } else {
+            res.json({
+                status: "🔄 Starting...",
+                connected: false,
+                message: "البوت يحاول الاتصال بواتساب..."
+            });
+        }
+    } catch (error) {
+        console.error('❌ خطأ في الصفحة الرئيسية:', error);
+        res.status(500).json({ error: "خطأ في تحميل الصفحة" });
     }
 });
 
@@ -248,7 +267,8 @@ app.get("/status", (req, res) => {
         connected: isWhatsappConnected,
         timestamp: new Date().toISOString(),
         uptime: process.uptime(),
-        hasQR: !!qrCodeData
+        hasQR: !!qrCodeData,
+        memory: process.memoryUsage()
     });
 });
 
@@ -294,7 +314,7 @@ app.post("/webhook", async (req, res) => {
 
         // تنسيق قائمة المنتجات
         let itemsList = "";
-        if (items && Array.isArray(items)) {
+        if (items && Array.isArray(items) && items.length > 0) {
             itemsList = items.map((item, index) => {
                 const name = item.product?.name || item.name || item.title || `منتج ${index + 1}`;
                 const qty = item.quantity || item.qty || 1;
@@ -330,7 +350,7 @@ app.post("/webhook", async (req, res) => {
         console.log(`📞 الرقم المنسق: ${formattedNumber}`);
         console.log("📤 محاولة إرسال الرسالة...");
 
-        // إرسال الرسالة
+        // إرسال الرسالة مع معالجة الأخطاء
         await sock.sendMessage(formattedNumber, { text: message });
 
         console.log(`✅ تم إرسال الطلب للعميل بنجاح على ${formattedNumber}`);
@@ -339,7 +359,8 @@ app.post("/webhook", async (req, res) => {
             success: true, 
             message: "تم إرسال الرسالة بنجاح",
             sentTo: customerPhone,
-            customerName: customerName
+            customerName: customerName,
+            timestamp: new Date().toISOString()
         });
 
     } catch (err) {
@@ -368,34 +389,88 @@ app.post("/test-send", async (req, res) => {
         let formattedNumber = phone.toString().replace(/^0/, "20") + "@s.whatsapp.net";
         await sock.sendMessage(formattedNumber, { text: message });
         
-        res.json({ success: true, sentTo: formattedNumber });
+        res.json({ 
+            success: true, 
+            sentTo: formattedNumber,
+            message: "تم إرسال الرسالة بنجاح"
+        });
     } catch (error) {
+        console.error('❌ خطأ في إرسال الرسالة التجريبية:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
 // Health check لـ Render
 app.get("/health", (req, res) => {
-    res.json({ status: "OK", uptime: process.uptime() });
+    res.json({ 
+        status: "OK", 
+        uptime: process.uptime(),
+        memory: process.memoryUsage(),
+        connected: isWhatsappConnected,
+        timestamp: new Date().toISOString()
+    });
+});
+
+// مسار لإعادة تشغيل البوت
+app.post("/restart", (req, res) => {
+    try {
+        console.log("🔄 إعادة تشغيل البوت...");
+        isWhatsappConnected = false;
+        qrCodeData = null;
+        
+        if (sock) {
+            sock.end();
+        }
+        
+        setTimeout(() => {
+            startBot();
+        }, 2000);
+        
+        res.json({ success: true, message: "تم إعادة تشغيل البوت" });
+    } catch (error) {
+        console.error('❌ خطأ في إعادة التشغيل:', error);
+        res.status(500).json({ error: error.message });
+    }
 });
 
 // Error handlers
 process.on('uncaughtException', (error) => {
     console.error('❌ Uncaught Exception:', error);
+    // لا نقوم بإنهاء العملية، فقط نسجل الخطأ
 });
 
 process.on('unhandledRejection', (reason, promise) => {
     console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
+// معالج إشارة إنهاء العملية
+process.on('SIGTERM', () => {
+    console.log('🛑 SIGTERM received, closing gracefully...');
+    if (sock) {
+        sock.end();
+    }
+    process.exit(0);
+});
+
+process.on('SIGINT', () => {
+    console.log('🛑 SIGINT received, closing gracefully...');
+    if (sock) {
+        sock.end();
+    }
+    process.exit(0);
+});
+
 // بدء الخادم
 const PORT = process.env.PORT || 3000;
-const HOST = '0.0.0.0';
+const HOST = process.env.HOST || '0.0.0.0';
 
 app.listen(PORT, HOST, () => {
     console.log(`🚀 Server شغال على http://${HOST}:${PORT}`);
     console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`📊 Memory Usage:`, process.memoryUsage());
     
     // بدء البوت بعد تشغيل الخادم
-    startBot();
+    setTimeout(() => {
+        startBot();
+    }, 2000);
 });
