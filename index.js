@@ -4,6 +4,8 @@ const bodyParser = require("body-parser");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const https = require("https"); // إضافة https للـ requests
+const http = require("http");   // إضافة http أيضاً
 
 // إضافة crypto polyfill للـ global scope
 global.crypto = crypto;
@@ -15,10 +17,89 @@ const makeWASocket = require("@whiskeysockets/baileys").default;
 const { useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason } = require("@whiskeysockets/baileys");
 const qrcode = require("qrcode");
 
-// دالة لتحديث حالة الطلب في Easy Order
+// دالة محسنة لإرسال HTTP requests بدون fetch
+function makeHttpRequest(url, options = {}) {
+    return new Promise((resolve, reject) => {
+        try {
+            const urlObj = new URL(url);
+            const isHttps = urlObj.protocol === 'https:';
+            const lib = isHttps ? https : http;
+            
+            const postData = options.body ? JSON.stringify(options.body) : null;
+            
+            const requestOptions = {
+                hostname: urlObj.hostname,
+                port: urlObj.port || (isHttps ? 443 : 80),
+                path: urlObj.pathname + urlObj.search,
+                method: options.method || 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'User-Agent': 'AutoService-WhatsApp-Bot/1.0',
+                    ...(options.headers || {}),
+                    ...(postData && { 'Content-Length': Buffer.byteLength(postData) })
+                },
+                timeout: 10000 // 10 seconds timeout
+            };
+            
+            const req = lib.request(requestOptions, (res) => {
+                let data = '';
+                
+                res.on('data', (chunk) => {
+                    data += chunk;
+                });
+                
+                res.on('end', () => {
+                    try {
+                        const response = {
+                            ok: res.statusCode >= 200 && res.statusCode < 300,
+                            status: res.statusCode,
+                            statusText: res.statusMessage,
+                            json: () => Promise.resolve(JSON.parse(data || '{}')),
+                            text: () => Promise.resolve(data)
+                        };
+                        resolve(response);
+                    } catch (parseError) {
+                        resolve({
+                            ok: res.statusCode >= 200 && res.statusCode < 300,
+                            status: res.statusCode,
+                            statusText: res.statusMessage,
+                            json: () => Promise.reject(parseError),
+                            text: () => Promise.resolve(data)
+                        });
+                    }
+                });
+            });
+            
+            req.on('error', (error) => {
+                reject(error);
+            });
+            
+            req.on('timeout', () => {
+                req.destroy();
+                reject(new Error('Request timeout'));
+            });
+            
+            if (postData) {
+                req.write(postData);
+            }
+            
+            req.end();
+        } catch (error) {
+            reject(error);
+        }
+    });
+}
+
+// دالة محسنة لتحديث حالة الطلب في Easy Order
 async function updateOrderStatus(customerPhone, status, notes = '') {
     try {
         const easyOrderWebhookUrl = process.env.EASYORDER_UPDATE_URL || 'https://your-easyorder-webhook.com/update-order';
+        
+        // تحقق من صحة الـ URL
+        if (!easyOrderWebhookUrl || easyOrderWebhookUrl.includes('your-easyorder-webhook.com')) {
+            console.log(`⚠️ لم يتم تكوين URL الـ Easy Order بشكل صحيح`);
+            return { success: false, error: 'EASYORDER_UPDATE_URL not configured' };
+        }
         
         const updateData = {
             customer_phone: customerPhone,
@@ -30,13 +111,20 @@ async function updateOrderStatus(customerPhone, status, notes = '') {
         
         console.log(`🔄 محاولة تحديث حالة الطلب في Easy Order:`, updateData);
         
-        const response = await fetch(easyOrderWebhookUrl, {
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+        
+        // إضافة Authorization إذا كان متوفراً
+        const apiKey = process.env.EASYORDER_API_KEY;
+        if (apiKey && apiKey !== '') {
+            headers['Authorization'] = `Bearer ${apiKey}`;
+        }
+        
+        const response = await makeHttpRequest(easyOrderWebhookUrl, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${process.env.EASYORDER_API_KEY || ''}`,
-            },
-            body: JSON.stringify(updateData),
+            headers: headers,
+            body: updateData
         });
         
         if (response.ok) {
@@ -44,12 +132,72 @@ async function updateOrderStatus(customerPhone, status, notes = '') {
             console.log(`✅ تم تحديث حالة الطلب في Easy Order بنجاح:`, result);
             return { success: true, data: result };
         } else {
-            console.error(`❌ فشل في تحديث Easy Order:`, response.status, await response.text());
-            return { success: false, error: `HTTP ${response.status}` };
+            const errorText = await response.text();
+            console.error(`❌ فشل في تحديث Easy Order:`, response.status, errorText);
+            return { success: false, error: `HTTP ${response.status}: ${errorText}` };
         }
         
     } catch (error) {
         console.error('❌ خطأ في تحديث حالة الطلب:', error.message);
+        
+        // تحقق من نوع الخطأ وقدم رسالة مفيدة
+        if (error.code === 'ENOTFOUND') {
+            return { success: false, error: 'خطأ في الاتصال: عنوان الـ URL غير صحيح' };
+        } else if (error.code === 'ECONNREFUSED') {
+            return { success: false, error: 'خطأ في الاتصال: الخادم رفض الاتصال' };
+        } else if (error.message.includes('timeout')) {
+            return { success: false, error: 'انتهت مهلة الاتصال' };
+        }
+        
+        return { success: false, error: error.message };
+    }
+}
+
+// دالة بديلة للتحديث المحلي (إذا فشل الـ API)
+async function saveOrderStatusLocally(customerPhone, status, notes = '') {
+    try {
+        const logDir = path.join(__dirname, 'orders_log');
+        if (!fs.existsSync(logDir)) {
+            fs.mkdirSync(logDir, { recursive: true });
+        }
+        
+        const logFile = path.join(logDir, 'orders.json');
+        let orders = [];
+        
+        // قراءة الطلبات الموجودة
+        if (fs.existsSync(logFile)) {
+            try {
+                const data = fs.readFileSync(logFile, 'utf8');
+                orders = JSON.parse(data);
+            } catch (parseError) {
+                console.warn('⚠️ خطأ في قراءة ملف الطلبات، إنشاء ملف جديد');
+                orders = [];
+            }
+        }
+        
+        // إضافة الطلب الجديد
+        const orderUpdate = {
+            customer_phone: customerPhone,
+            status: status,
+            notes: notes,
+            updated_by: 'whatsapp_bot',
+            timestamp: new Date().toISOString()
+        };
+        
+        orders.push(orderUpdate);
+        
+        // حفظ الطلبات (الاحتفاظ بآخر 100 طلب فقط)
+        if (orders.length > 100) {
+            orders = orders.slice(-100);
+        }
+        
+        fs.writeFileSync(logFile, JSON.stringify(orders, null, 2));
+        console.log(`📁 تم حفظ الطلب محلياً: ${status} - ${customerPhone}`);
+        
+        return { success: true, saved_locally: true };
+        
+    } catch (error) {
+        console.error('❌ خطأ في الحفظ المحلي:', error.message);
         return { success: false, error: error.message };
     }
 }
@@ -161,7 +309,14 @@ async function startBot() {
                         
                         if (responseText) {
                             await sock.sendMessage(customerJid, { text: responseText });
+                            
+                            // محاولة التحديث مع الـ fallback
                             const updateResult = await updateOrderStatus(customerPhone, orderStatus, 'تم الرد عبر الاستفتاء');
+                            if (!updateResult.success) {
+                                console.log('🔄 محاولة الحفظ المحلي...');
+                                await saveOrderStatusLocally(customerPhone, orderStatus, 'تم الرد عبر الاستفتاء');
+                            }
+                            
                             console.log(`✅ تم تحديث الطلب: ${orderStatus}`);
                         }
                         return;
@@ -198,7 +353,14 @@ async function startBot() {
                     
                     if (responseText) {
                         await sock.sendMessage(customerJid, { text: responseText });
-                        await updateOrderStatus(customerPhone, orderStatus, 'تم الرد عبر الأزرار');
+                        
+                        // محاولة التحديث مع الـ fallback
+                        const updateResult = await updateOrderStatus(customerPhone, orderStatus, 'تم الرد عبر الأزرار');
+                        if (!updateResult.success) {
+                            console.log('🔄 محاولة الحفظ المحلي...');
+                            await saveOrderStatusLocally(customerPhone, orderStatus, 'تم الرد عبر الأزرار');
+                        }
+                        
                         console.log(`✅ تم تحديث الطلب: ${orderStatus}`);
                     }
                     return;
@@ -233,11 +395,17 @@ async function startBot() {
                     await sock.sendMessage(customerJid, { text: responseText });
                     
                     if (orderStatus) {
+                        // محاولة التحديث مع الـ fallback
                         const updateResult = await updateOrderStatus(customerPhone, orderStatus, `رد نصي: "${text}"`);
                         if (updateResult.success) {
                             console.log(`✅ تم تحديث Easy Order: ${orderStatus}`);
                         } else {
-                            console.error(`❌ فشل تحديث Easy Order: ${updateResult.error}`);
+                            console.log(`⚠️ فشل تحديث Easy Order: ${updateResult.error}`);
+                            console.log('🔄 محاولة الحفظ المحلي...');
+                            const localResult = await saveOrderStatusLocally(customerPhone, orderStatus, `رد نصي: "${text}"`);
+                            if (localResult.success) {
+                                console.log('✅ تم الحفظ محلياً');
+                            }
                         }
                     }
                 }
@@ -300,6 +468,22 @@ app.get("/status", (req, res) => {
         uptime: process.uptime(),
         hasQR: !!qrCodeData
     });
+});
+
+// عرض الطلبات المحفوظة محلياً
+app.get("/orders", (req, res) => {
+    try {
+        const logFile = path.join(__dirname, 'orders_log', 'orders.json');
+        if (fs.existsSync(logFile)) {
+            const data = fs.readFileSync(logFile, 'utf8');
+            const orders = JSON.parse(data);
+            res.json({ success: true, orders: orders });
+        } else {
+            res.json({ success: true, orders: [], message: 'لا توجد طلبات محفوظة' });
+        }
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
 });
 
 // Webhook رئيسي - مُحسَّن لإرسال رسالة واحدة فقط
@@ -448,5 +632,4 @@ const HOST = process.env.HOST || '0.0.0.0';
 
 app.listen(PORT, HOST, () => {
     console.log(`🚀 Server running on http://${HOST}:${PORT}`);
-    setTimeout(() => startBot(), 2000);
-});
+    console.log(`📱 Easy Order URL: ${process.env.EASYORDER_UPDATE
