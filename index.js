@@ -152,6 +152,6 @@ async function startBot() {
                 const response = `✅ تم تأكيد طلبك، وسنبدأ في تجهيز شحنتك قريبًا!`;
                 await sock.sendMessage(msg.key.remoteJid, { text: response });
                 console.log("📤 رد على العميل بتأكيد الطلب.");
+            }   
             }
-        }
-   });
+        });
