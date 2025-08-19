@@ -143,17 +143,44 @@ async function startBot() {
                 const text = message.message.conversation || 
                            message.message.extendedTextMessage?.text || "";
                 
+                // معالجة الرد على جميع أنواع الأزرار والقوائم
                 const buttonResponseMessage = message.message.buttonsResponseMessage;
                 const listResponseMessage = message.message.listResponseMessage;
+                const templateButtonReply = message.message.templateButtonReplyMessage;
+                const interactiveResponseMessage = message.message.interactiveResponseMessage;
                 
                 console.log(`📨 رسالة واردة من ${message.key.remoteJid}: ${text}`);
                 
-                // معالجة الرد على الأزرار
+                let buttonId = null;
+                
+                // استخراج معرف الزر من أي نوع من الردود
                 if (buttonResponseMessage) {
-                    const buttonId = buttonResponseMessage.selectedButtonId;
+                    buttonId = buttonResponseMessage.selectedButtonId;
+                    console.log(`🔲 Button Response: ${buttonId}`);
+                } else if (listResponseMessage) {
+                    buttonId = listResponseMessage.singleSelectReply.selectedRowId;
+                    console.log(`📋 List Response: ${buttonId}`);
+                } else if (templateButtonReply) {
+                    buttonId = templateButtonReply.selectedId;
+                    console.log(`🎯 Template Response: ${buttonId}`);
+                } else if (interactiveResponseMessage) {
+                    const nativeFlowResponse = interactiveResponseMessage.nativeFlowResponseMessage;
+                    if (nativeFlowResponse && nativeFlowResponse.paramsJson) {
+                        try {
+                            const params = JSON.parse(nativeFlowResponse.paramsJson);
+                            buttonId = params.id;
+                            console.log(`🔄 Interactive Response: ${buttonId}`);
+                        } catch (e) {
+                            console.log(`❌ خطأ في تحليل Interactive Response`);
+                        }
+                    }
+                }
+                
+                // معالجة الرد على الأزرار
+                if (buttonId) {
                     const customerPhone = message.key.remoteJid.replace('@s.whatsapp.net', '');
                     
-                    console.log(`🔲 تم الضغط على زرار: ${buttonId} من العميل: ${customerPhone}`);
+                    console.log(`🔲 تم الضغط على: ${buttonId} من العميل: ${customerPhone}`);
                     
                     if (buttonId === 'confirm_order') {
                         // تأكيد الطلب
@@ -430,41 +457,164 @@ app.post("/webhook", async (req, res) => {
         console.log(`📞 الرقم المنسق: ${formattedNumber}`);
         console.log("📤 محاولة إرسال الرسالة مع الأزرار...");
 
-        // إنشاء الرسالة مع الأزرار التفاعلية
-        const messageWithButtons = {
-            text: message,
-            buttons: [
-                {
-                    buttonId: 'confirm_order',
-                    buttonText: { displayText: '✅ تأكيد الطلب' },
-                    type: 1
-                },
-                {
-                    buttonId: 'cancel_order', 
-                    buttonText: { displayText: '❌ إلغاء الطلب' },
-                    type: 1
-                }
-            ],
-            headerType: 1,
-            footer: '🤖 رد تلقائي من اوتو سيرفس - اضغط على أحد الأزرار أعلاه'
-        };
+        // جربة عدة طرق للأزرار
+        let buttonsSent = false;
 
-        // إرسال الرسالة مع معالجة الأخطاء
+        // الطريقة الأولى: Interactive Message (الأحدث)
         try {
-            // محاولة إرسال رسالة بأزرار أولاً
-            await sock.sendMessage(formattedNumber, messageWithButtons);
-            console.log(`✅ تم إرسال الرسالة مع الأزرار بنجاح`);
-        } catch (buttonError) {
-            console.log(`⚠️ فشل إرسال الأزرار، سنرسل رسالة عادية:`, buttonError.message);
+            const interactiveMessage = {
+                interactiveMessage: {
+                    body: { text: message },
+                    footer: { text: '🤖 اوتو سيرفس - اختر أحد الخيارات' },
+                    nativeFlowMessage: {
+                        buttons: [
+                            {
+                                name: "quick_reply",
+                                buttonParamsJson: JSON.stringify({
+                                    display_text: "✅ تأكيد الطلب",
+                                    id: "confirm_order"
+                                })
+                            },
+                            {
+                                name: "quick_reply", 
+                                buttonParamsJson: JSON.stringify({
+                                    display_text: "❌ إلغاء الطلب",
+                                    id: "cancel_order"
+                                })
+                            }
+                        ]
+                    }
+                }
+            };
             
-            // في حالة فشل الأزرار، أرسل رسالة عادية
+            await sock.sendMessage(formattedNumber, interactiveMessage);
+            console.log(`✅ تم إرسال Interactive Message بنجاح`);
+            buttonsSent = true;
+            
+        } catch (interactiveError) {
+            console.log(`❌ فشل Interactive Message:`, interactiveError.message);
+        }
+
+        // الطريقة الثانية: Template Buttons (إذا فشلت الأولى)
+        if (!buttonsSent) {
+            try {
+                const templateMessage = {
+                    templateMessage: {
+                        hydratedTemplate: {
+                            hydratedContentText: message,
+                            hydratedFooterText: '🤖 اوتو سيرفس',
+                            hydratedButtons: [
+                                {
+                                    quickReplyButton: {
+                                        displayText: '✅ تأكيد الطلب',
+                                        id: 'confirm_order'
+                                    }
+                                },
+                                {
+                                    quickReplyButton: {
+                                        displayText: '❌ إلغاء الطلب', 
+                                        id: 'cancel_order'
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                };
+                
+                await sock.sendMessage(formattedNumber, templateMessage);
+                console.log(`✅ تم إرسال Template Message بنجاح`);
+                buttonsSent = true;
+                
+            } catch (templateError) {
+                console.log(`❌ فشل Template Message:`, templateError.message);
+            }
+        }
+
+        // الطريقة الثالثة: Button Message التقليدية
+        if (!buttonsSent) {
+            try {
+                const buttonMessage = {
+                    text: message,
+                    buttons: [
+                        {
+                            buttonId: 'confirm_order',
+                            buttonText: { displayText: '✅ تأكيد الطلب' },
+                            type: 1
+                        },
+                        {
+                            buttonId: 'cancel_order',
+                            buttonText: { displayText: '❌ إلغاء الطلب' },
+                            type: 1
+                        }
+                    ],
+                    headerType: 1,
+                    footer: '🤖 اوتو سيرفس - اختر أحد الأزرار'
+                };
+                
+                await sock.sendMessage(formattedNumber, buttonMessage);
+                console.log(`✅ تم إرسال Button Message بنجاح`);
+                buttonsSent = true;
+                
+            } catch (buttonError) {
+                console.log(`❌ فشل Button Message:`, buttonError.message);
+            }
+        }
+
+        // الطريقة الرابعة: List Message  
+        if (!buttonsSent) {
+            try {
+                const listMessage = {
+                    text: message,
+                    listMessage: {
+                        title: "اختيار العملية",
+                        description: "اضغط على القائمة واختر",
+                        sections: [
+                            {
+                                title: "خيارات الطلب",
+                                rows: [
+                                    {
+                                        title: "✅ تأكيد الطلب",
+                                        description: "أوافق على الطلب وأريد المتابعة",
+                                        rowId: "confirm_order"
+                                    },
+                                    {
+                                        title: "❌ إلغاء الطلب", 
+                                        description: "أريد إلغاء هذا الطلب",
+                                        rowId: "cancel_order"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    footer: "🤖 اوتو سيرفس"
+                };
+                
+                await sock.sendMessage(formattedNumber, listMessage);
+                console.log(`✅ تم إرسال List Message بنجاح`);
+                buttonsSent = true;
+                
+            } catch (listError) {
+                console.log(`❌ فشل List Message:`, listError.message);
+            }
+        }
+
+        // الطريقة الأخيرة: رسالة عادية مع خيارات نصية
+        if (!buttonsSent) {
+            console.log(`⚠️ فشل جميع طرق الأزرار، سنرسل رسالة نصية مع خيارات`);
+            
             const fallbackMessage = message + 
-                '\n\n📝 للرد:\n' +
-                '• اكتب "موافق" أو "تم" للتأكيد ✅\n' +
-                '• اكتب "إلغاء" للإلغاء ❌';
+                '\n\n┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓\n' +
+                '┃        🎛️ خيارات الطلب        ┃\n' +
+                '┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫\n' +
+                '┃                                      ┃\n' +
+                '┃  ✅ للتأكيد: اكتب "موافق"     ┃\n' +
+                '┃  ❌ للإلغاء: اكتب "إلغاء"      ┃\n' +
+                '┃                                      ┃\n' +
+                '┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛\n\n' +
+                '🤖 رد تلقائي من اوتو سيرفس';
             
             await sock.sendMessage(formattedNumber, { text: fallbackMessage });
-            console.log(`✅ تم إرسال رسالة عادية بدلاً من الأزرار`);
+            console.log(`✅ تم إرسال رسالة نصية مع خيارات منسقة`);
         }
 
         // تحديث الاستجابة لتتضمن معلومات الطلب
