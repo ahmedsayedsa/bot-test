@@ -9,6 +9,7 @@ let isWhatsappConnected = false;
 let qrCodeData = null;
 
 async function startBot() {
+    // حذف مجلد auth_info عند كل تشغيل لضمان جلسة جديدة
     if (fs.existsSync("auth_info")) {
         console.log("⚠️ تم حذف مجلد auth_info لبدء جلسة جديدة.");
         fs.rmSync("auth_info", { recursive: true, force: true });
@@ -141,17 +142,44 @@ async function startBot() {
     });
 
     sock.ev.on("messages.upsert", async (m) => {
-        if (!m.messages || m.messages.length === 0) return;
+        const message = m.messages[0];
+        if (!message.message || message.key.fromMe) return;
+        
+        const text = message.message.conversation || 
+                     message.message.extendedTextMessage?.text || "";
+        
+        console.log(`📨 رسالة واردة من ${message.key.remoteJid}: ${text}`);
+        
+        if (text.toLowerCase().includes("موافق") || text.toLowerCase().includes("تم")) {
+            await sock.sendMessage(message.key.remoteJid, { 
+                text: "✅ تم تأكيد طلبك بنجاح! سيتم التحضير والتوصيل قريباً. شكراً لثقتك 🙏" 
+            });
+            console.log("✅ تم تأكيد الطلب");
+        } else if (text.toLowerCase().includes("الغاء") || text.toLowerCase().includes("إلغاء")) {
+            await sock.sendMessage(message.key.remoteJid, { 
+                text: "❌ تم إلغاء طلبك. نأسف لعدم تمكننا من خدمتك هذه المرة 😔" 
+            });
+            console.log("❌ تم إلغاء الطلب");
+        }
+    });
 
-        const msg = m.messages[0];
-        if (!msg.key.fromMe && msg.message && msg.message.conversation) {
-            const text = msg.message.conversation.trim().toLowerCase();
-            console.log(`📥 رسالة جديدة من ${msg.key.remoteJid}: ${text}`);
 
-            if (text === "تم" || text === "موافق") {
-                const response = `✅ تم تأكيد طلبك، وسنبدأ في تجهيز شحنتك قريبًا!`;
-                await sock.sendMessage(msg.key.remoteJid, { text: response });
-                console.log("📤 رد على العميل بتأكيد الطلب.");
-            }   
-            }
-        });
+    const PORT = process.env.PORT;
+    const HOST = '0.0.0.0'; 
+    
+    app.listen(PORT, HOST, () => {
+        console.log(`🚀 Webhook server شغال على http://${HOST}:${PORT}`);
+    });
+}
+
+process.on('uncaughtException', (error) => {
+    console.error('❌ Uncaught Exception:', error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+startBot().catch(err => {
+    console.error("❌ خطأ في بدء البوت:", err);
+});
