@@ -14,6 +14,46 @@ const makeWASocket = require("@whiskeysockets/baileys").default;
 const { useMultiFileAuthState, fetchLatestBaileysVersion } = require("@whiskeysockets/baileys");
 const qrcode = require("qrcode");
 
+// دالة لتحديث حالة الطلب في Easy Order
+async function updateOrderStatus(customerPhone, status, notes = '') {
+    try {
+        // هنا تضع رابط Easy Order API لتحديث الطلبات
+        const easyOrderWebhookUrl = process.env.EASYORDER_UPDATE_URL || 'https://your-easyorder-webhook.com/update-order';
+        
+        const updateData = {
+            customer_phone: customerPhone,
+            status: status, // 'confirmed', 'cancelled', 'processing', 'shipped', 'delivered'
+            notes: notes,
+            updated_by: 'whatsapp_bot',
+            timestamp: new Date().toISOString()
+        };
+        
+        console.log(`🔄 محاولة تحديث حالة الطلب في Easy Order:`, updateData);
+        
+        const response = await fetch(easyOrderWebhookUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${process.env.EASYORDER_API_KEY || ''}`, // إذا كان فيه API key
+            },
+            body: JSON.stringify(updateData)
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            console.log(`✅ تم تحديث حالة الطلب في Easy Order بنجاح:`, result);
+            return true;
+        } else {
+            console.error(`❌ فشل في تحديث Easy Order:`, response.status, await response.text());
+            return false;
+        }
+        
+    } catch (error) {
+        console.error('❌ خطأ في تحديث حالة الطلب:', error);
+        return false;
+    }
+}
+
 let isWhatsappConnected = false;
 let qrCodeData = null;
 let sock = null;
@@ -94,7 +134,7 @@ async function startBot() {
             }
         });
 
-        // التعامل مع الرسائل الواردة
+        // التعامل مع الرسائل الواردة والأزرار
         sock.ev.on("messages.upsert", async (m) => {
             try {
                 const message = m.messages[0];
@@ -103,18 +143,60 @@ async function startBot() {
                 const text = message.message.conversation || 
                            message.message.extendedTextMessage?.text || "";
                 
+                const buttonResponseMessage = message.message.buttonsResponseMessage;
+                const listResponseMessage = message.message.listResponseMessage;
+                
                 console.log(`📨 رسالة واردة من ${message.key.remoteJid}: ${text}`);
                 
-                if (text.toLowerCase().includes("موافق") || text.toLowerCase().includes("تم")) {
+                // معالجة الرد على الأزرار
+                if (buttonResponseMessage) {
+                    const buttonId = buttonResponseMessage.selectedButtonId;
+                    const customerPhone = message.key.remoteJid.replace('@s.whatsapp.net', '');
+                    
+                    console.log(`🔲 تم الضغط على زرار: ${buttonId} من العميل: ${customerPhone}`);
+                    
+                    if (buttonId === 'confirm_order') {
+                        // تأكيد الطلب
+                        await sock.sendMessage(message.key.remoteJid, { 
+                            text: "✅ تم تأكيد طلبك بنجاح!\n\n🚚 سيتم تجهيز طلبك والتواصل معك لترتيب موعد التوصيل.\n\n⏰ مدة التجهيز المتوقعة: 1-2 يوم عمل\n\n🙏 شكراً لثقتك في اوتو سيرفس!" 
+                        });
+                        
+                        // تحديث حالة الطلب في Easy Order
+                        await updateOrderStatus(customerPhone, 'confirmed', 'تم تأكيد الطلب من العميل');
+                        console.log("✅ تم تأكيد الطلب وتحديث الحالة");
+                        
+                    } else if (buttonId === 'cancel_order') {
+                        // إلغاء الطلب
+                        await sock.sendMessage(message.key.remoteJid, { 
+                            text: "❌ تم إلغاء طلبك بناءً على طلبك.\n\n😔 نأسف لعدم تمكننا من خدمتك هذه المرة.\n\n💡 يمكنك طلب منتجات أخرى في أي وقت من خلال موقعنا.\n\nشكراً لك!" 
+                        });
+                        
+                        // تحديث حالة الطلب في Easy Order
+                        await updateOrderStatus(customerPhone, 'cancelled', 'تم إلغاء الطلب من قبل العميل');
+                        console.log("❌ تم إلغاء الطلب وتحديث الحالة");
+                    }
+                }
+                
+                // معالجة الرسائل النصية العادية (للتوافق مع الطريقة القديمة)
+                else if (text.toLowerCase().includes("موافق") || text.toLowerCase().includes("تم")) {
+                    const customerPhone = message.key.remoteJid.replace('@s.whatsapp.net', '');
+                    
                     await sock.sendMessage(message.key.remoteJid, { 
                         text: "✅ تم تأكيد طلبك بنجاح! سيتم التحضير والتوصيل قريباً. شكراً لثقتك 🙏" 
                     });
-                    console.log("✅ تم تأكيد الطلب");
+                    
+                    await updateOrderStatus(customerPhone, 'confirmed', 'تم تأكيد الطلب نصياً من العميل');
+                    console.log("✅ تم تأكيد الطلب نصياً");
+                    
                 } else if (text.toLowerCase().includes("الغاء") || text.toLowerCase().includes("إلغاء")) {
+                    const customerPhone = message.key.remoteJid.replace('@s.whatsapp.net', '');
+                    
                     await sock.sendMessage(message.key.remoteJid, { 
                         text: "❌ تم إلغاء طلبك. نأسف لعدم تمكننا من خدمتك هذه المرة 😔" 
                     });
-                    console.log("❌ تم إلغاء الطلب");
+                    
+                    await updateOrderStatus(customerPhone, 'cancelled', 'تم إلغاء الطلب نصياً من العميل');
+                    console.log("❌ تم إلغاء الطلب نصياً");
                 }
             } catch (msgError) {
                 console.error('❌ خطأ في معالجة الرسالة:', msgError);
@@ -346,10 +428,57 @@ app.post("/webhook", async (req, res) => {
         formattedNumber += '@s.whatsapp.net';
         
         console.log(`📞 الرقم المنسق: ${formattedNumber}`);
-        console.log("📤 محاولة إرسال الرسالة...");
+        console.log("📤 محاولة إرسال الرسالة مع الأزرار...");
+
+        // إنشاء الرسالة مع الأزرار التفاعلية
+        const messageWithButtons = {
+            text: message,
+            buttons: [
+                {
+                    buttonId: 'confirm_order',
+                    buttonText: { displayText: '✅ تأكيد الطلب' },
+                    type: 1
+                },
+                {
+                    buttonId: 'cancel_order', 
+                    buttonText: { displayText: '❌ إلغاء الطلب' },
+                    type: 1
+                }
+            ],
+            headerType: 1,
+            footer: '🤖 رد تلقائي من اوتو سيرفس - اضغط على أحد الأزرار أعلاه'
+        };
 
         // إرسال الرسالة مع معالجة الأخطاء
-        await sock.sendMessage(formattedNumber, { text: message });
+        try {
+            // محاولة إرسال رسالة بأزرار أولاً
+            await sock.sendMessage(formattedNumber, messageWithButtons);
+            console.log(`✅ تم إرسال الرسالة مع الأزرار بنجاح`);
+        } catch (buttonError) {
+            console.log(`⚠️ فشل إرسال الأزرار، سنرسل رسالة عادية:`, buttonError.message);
+            
+            // في حالة فشل الأزرار، أرسل رسالة عادية
+            const fallbackMessage = message + 
+                '\n\n📝 للرد:\n' +
+                '• اكتب "موافق" أو "تم" للتأكيد ✅\n' +
+                '• اكتب "إلغاء" للإلغاء ❌';
+            
+            await sock.sendMessage(formattedNumber, { text: fallbackMessage });
+            console.log(`✅ تم إرسال رسالة عادية بدلاً من الأزرار`);
+        }
+
+        // تحديث الاستجابة لتتضمن معلومات الطلب
+        const orderData = {
+            customer_phone: customerPhone,
+            customer_name: customerName,
+            total: total,
+            items: items.length,
+            timestamp: new Date().toISOString()
+        };
+        
+        // حفظ بيانات الطلب مؤقتاً (للربط مع الردود)
+        global.pendingOrders = global.pendingOrders || new Map();
+        global.pendingOrders.set(customerPhone, orderData);
 
         console.log(`✅ تم إرسال الطلب للعميل بنجاح على ${formattedNumber}`);
         
@@ -358,7 +487,8 @@ app.post("/webhook", async (req, res) => {
             message: "تم إرسال الرسالة بنجاح",
             sentTo: customerPhone,
             customerName: customerName,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            hasButtons: true
         });
 
     } catch (err) {
@@ -394,6 +524,51 @@ app.post("/test-send", async (req, res) => {
         });
     } catch (error) {
         console.error('❌ خطأ في إرسال الرسالة التجريبية:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Route لاستقبال updates من Easy Order (إذا احتجت تحديث حالة طلب من الإدارة)
+app.post("/update-order-status", async (req, res) => {
+    try {
+        const { customer_phone, status, message } = req.body;
+        
+        if (!customer_phone || !status) {
+            return res.status(400).json({ error: "مطلوب رقم العميل وحالة الطلب" });
+        }
+        
+        if (!isWhatsappConnected) {
+            return res.status(503).json({ error: "البوت غير متصل بواتساب" });
+        }
+        
+        let formattedNumber = customer_phone.toString().replace(/^0/, "20") + "@s.whatsapp.net";
+        
+        let statusMessage = "";
+        switch (status) {
+            case 'processing':
+                statusMessage = "🔄 طلبك قيد التجهيز الآن!\n\nسيتم التواصل معك قريباً لتأكيد موعد التوصيل.\n\n⏰ مدة التجهيز المتوقعة: 1-2 يوم عمل";
+                break;
+            case 'shipped':
+                statusMessage = "🚚 تم شحن طلبك!\n\nسيصلك خلال 24-48 ساعة.\n\n📞 سيتواصل معك المندوب قبل الوصول.";
+                break;
+            case 'delivered':
+                statusMessage = "✅ تم توصيل طلبك بنجاح!\n\n🙏 شكراً لاختيارك اوتو سيرفس.\n\n⭐ نأمل أن تشاركنا تقييمك للخدمة.";
+                break;
+            default:
+                statusMessage = message || `تحديث حالة الطلب: ${status}`;
+        }
+        
+        await sock.sendMessage(formattedNumber, { text: statusMessage });
+        
+        res.json({ 
+            success: true, 
+            message: "تم إرسال تحديث الحالة للعميل",
+            status: status,
+            sentTo: customer_phone
+        });
+        
+    } catch (error) {
+        console.error('❌ خطأ في تحديث حالة الطلب:', error);
         res.status(500).json({ error: error.message });
     }
 });
