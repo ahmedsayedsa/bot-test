@@ -35,10 +35,8 @@ async function startBot() {
             keepAliveIntervalMs: 10000,
             markOnlineOnConnect: false,
             generateHighQualityLinkPreview: false,
-            syncFullHistory: false,
-            logger: {
-                level: 'silent'
-            }
+            syncFullHistory: false
+            // إزالة logger تماماً
         });
 
         sock.ev.on("creds.update", saveCreds);
