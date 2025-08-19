@@ -4,7 +4,7 @@
   "description": "WhatsApp Bot for AutoService Orders",
   "main": "bot.js",
   "scripts": {
-    "start": "node bot.js",
+    "start": "node index.js",
     "dev": "node bot.js"
   },
   "dependencies": {
