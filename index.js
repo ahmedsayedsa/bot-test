@@ -1,6 +1,32 @@
-const express = require("express");
+// Package.json المطلوب:
+/*
+{
+  "name": "whatsapp-easyorder-bot",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "body-parser": "^1.20.2",
+    "@whiskeysockets/baileys": "^6.4.0",
+    "qrcode": "^1.5.3",
+    "crypto": "^1.0.1"
+  },
+  "engines": {
+    "node": "18.x"
+  }
+}
+*/
 const bodyParser = require("body-parser");
 const fs = require("fs");
+const crypto = require("crypto");
+
+// إضافة crypto polyfill للـ global scope
+global.crypto = crypto;
+global.crypto.webcrypto = crypto.webcrypto;
+
 const makeWASocket = require("@whiskeysockets/baileys").default;
 const { useMultiFileAuthState, fetchLatestBaileysVersion } = require("@whiskeysockets/baileys");
 const qrcode = require("qrcode");
@@ -24,7 +50,13 @@ async function startBot() {
             connectTimeoutMs: 60000,
             defaultQueryTimeoutMs: 0,
             keepAliveIntervalMs: 10000,
-            markOnlineOnConnect: true
+            markOnlineOnConnect: false,
+            // إضافة إعدادات للـ crypto
+            generateHighQualityLinkPreview: false,
+            syncFullHistory: false,
+            logger: {
+                level: 'silent'
+            }
         });
 
         sock.ev.on("creds.update", saveCreds);
