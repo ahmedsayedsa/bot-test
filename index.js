@@ -15,6 +15,28 @@ const makeWASocket = require("@whiskeysockets/baileys").default;
 const { useMultiFileAuthState, fetchLatestBaileysVersion } = require("@whiskeysockets/baileys");
 const qrcode = require("qrcode");
 
+// دالة لتنظيف HTML وتحويله لنص عادي
+function stripHtml(html) {
+    if (!html || typeof html !== 'string') return '';
+    
+    return html
+        .replace(/<[^>]*>/g, '') // إزالة جميع tags
+        .replace(/&nbsp;/g, ' ') // إزالة &nbsp;
+        .replace(/&amp;/g, '&')  // إزالة &amp;
+        .replace(/&lt;/g, '<')   // إزالة &lt;
+        .replace(/&gt;/g, '>')   // إزالة &gt;
+        .replace(/&quot;/g, '"') // إزالة &quot;
+        .replace(/&#39;/g, "'")  // إزالة &#39;
+        .replace(/\s+/g, ' ')    // تنظيف المسافات المتعددة
+        .trim();                 // إزالة المسافات من البداية والنهاية
+}
+
+// دالة لقطع النص الطويل
+function truncateText(text, maxLength = 100) {
+    if (!text || text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + '...';
+}
+
 let isWhatsappConnected = false;
 let qrCodeData = null;
 let sock = null;
@@ -461,13 +483,37 @@ app.post("/webhook", async (req, res) => {
     try {
         const data = req.body;
         
-        // استخراج البيانات
+        // استخراج البيانات من Easy Order
         const orderId = data.id || data.order_id || Date.now().toString();
-        const customerName = data.full_name || data.customer_name || data.name || "عميلنا الكريم";
-        const customerPhone = data.phone || data.customer_phone || data.mobile || null;
-        const total = data.total_cost || data.total || data.totalAmount || data.amount || "سيتم تحديده";
-        const address = data.address || data.shipping_address || "غير محدد";
-        const items = data.cart_items || data.items || data.products || [];
+        const customerName = data.full_name || data.customer_name || data.name || 
+                           data.customer?.name || data.user?.name || "عميلنا الكريم";
+        const customerPhone = data.phone || data.customer_phone || data.mobile || 
+                             data.customer?.phone || data.user?.phone || null;
+        const total = data.total_cost || data.total || data.totalAmount || data.amount || 
+                     data.grand_total || "سيتم تحديده";
+        const address = data.address || data.shipping_address || data.delivery_address || 
+                       data.customer?.address || "غير محدد";
+        
+        // معالجة العناصر - يمكن أن تكون منتج واحد أو قائمة منتجات
+        let items = [];
+        if (data.cart_items && Array.isArray(data.cart_items)) {
+            items = data.cart_items;
+        } else if (data.items && Array.isArray(data.items)) {
+            items = data.items;
+        } else if (data.products && Array.isArray(data.products)) {
+            items = data.products;
+        } else if (data.product) {
+            // منتج واحد
+            items = [data.product];
+        } else if (data.name && data.price) {
+            // البيانات مباشرة كمنتج واحد
+            items = [{
+                name: data.name,
+                price: data.sale_price || data.price,
+                quantity: data.quantity || 1,
+                description: data.description
+            }];
+        }
         
         console.log(`📝 رقم الطلب: ${orderId}`);
         console.log(`👤 العميل: ${customerName}`);
@@ -493,28 +539,76 @@ app.post("/webhook", async (req, res) => {
             timestamp: new Date().toISOString()
         };
 
-        // تنسيق قائمة المنتجات
+        // تنسيق قائمة المنتجات مع معالجة أفضل للبيانات
         let itemsList = "";
         if (items && Array.isArray(items) && items.length > 0) {
             itemsList = items.map((item, index) => {
+                // استخراج اسم المنتج
                 const name = item.product?.name || item.name || item.title || `منتج ${index + 1}`;
-                const qty = item.quantity || item.qty || 1;
-                const price = item.price || item.unit_price || '';
-                return `• ${name}: ${qty} قطعة${price ? ` (${price} ج.م)` : ''}`;
+                
+                // استخراج الكمية
+                const qty = item.quantity || item.qty || item.pivot?.quantity || 1;
+                
+                // استخراج السعر (أولوية لسعر التخفيض)
+                let price = '';
+                if (item.sale_price && item.sale_price > 0) {
+                    price = item.sale_price;
+                } else if (item.price) {
+                    price = item.price;
+                } else if (item.unit_price) {
+                    price = item.unit_price;
+                } else if (item.product?.sale_price && item.product.sale_price > 0) {
+                    price = item.product.sale_price;
+                } else if (item.product?.price) {
+                    price = item.product.price;
+                }
+                
+                // تنسيق السطر
+                let line = `• ${name}`;
+                if (qty > 1) {
+                    line += `: ${qty} قطعة`;
+                }
+                if (price) {
+                    line += ` (${price} ج.م${qty > 1 ? ' للقطعة' : ''})`;
+                }
+                
+                return line;
             }).join("\n");
         }
         
-        // صياغة الرسالة مع الأزرار
-        const message = `🌟 مرحباً ${customerName}\n\n` +
-                       `شكرًا لاختيارك اوتو سيرفس! تم استلام طلبك:\n\n` +
-                       `🆔 رقم الطلب: ${orderId}\n\n` +
-                       (itemsList ? `🛍️ تفاصيل الطلب:\n${itemsList}\n\n` : '') +
-                       `💰 الإجمالي: ${total} ج.م\n` +
-                       `📍 عنوان التوصيل: ${address}\n\n` +
-                       `⚠️ المعاينة غير متاحة وقت الاستلام\n` +
-                       `يُرجى تأكيد الطلب للمتابعة:`;
+        // حساب المجموع إذا لم يكن موجود
+        if (total === "سيتم تحديده" && items && items.length > 0) {
+            let calculatedTotal = 0;
+            items.forEach(item => {
+                const qty = item.quantity || item.qty || item.pivot?.quantity || 1;
+                const price = item.sale_price || item.price || item.unit_price || 
+                            item.product?.sale_price || item.product?.price || 0;
+                calculatedTotal += (qty * price);
+            });
+            if (calculatedTotal > 0) {
+                total = calculatedTotal;
+            }
+        }
+        
+        // صياغة الرسالة مع الأزرار (محسنة)
+        let message = `🌟 أهلاً وسهلاً ${customerName}\n\n` +
+                     `شكرًا لاختيارك اوتو سيرفس! تم استلام طلبك بنجاح 🎉\n\n` +
+                     `🆔 رقم الطلب: #${orderId.toString().slice(-6)}\n\n`;
+        
+        if (itemsList) {
+            message += `🛍️ تفاصيل الطلب:\n${itemsList}\n\n`;
+        }
+        
+        message += `💰 الإجمالي: ${total} ج.م\n`;
+        
+        if (address && address !== "غير محدد") {
+            message += `📍 عنوان التوصيل: ${address}\n`;
+        }
+        
+        message += `\n⚠️ ملاحظة مهمة: المعاينة غير متاحة وقت الاستلام\n` +
+                  `🔄 يُرجى تأكيد طلبك للبدء في التحضير والشحن:`;
 
-        // إنشاء الأزرار التفاعلية
+        // إنشاء الأزرار التفاعلية المحسنة
         const buttons = [
             {
                 buttonId: 'confirm_order',
@@ -534,12 +628,20 @@ app.post("/webhook", async (req, res) => {
             headerType: 1
         };
 
-        // تنسيق رقم الهاتف
-        let formattedNumber = customerPhone.toString().trim().replace(/[\s\-\(\)]/g, '');
+        // معالجة رقم الهاتف مع المزيد من التحقق
+        let formattedNumber = customerPhone.toString().trim().replace(/[\s\-\(\)\+]/g, '');
         
-        if (formattedNumber.startsWith('0')) {
+        // إزالة الأصفار البادئة والتنسيق
+        if (formattedNumber.startsWith('00')) {
+            formattedNumber = formattedNumber.substring(2);
+        } else if (formattedNumber.startsWith('0')) {
             formattedNumber = '20' + formattedNumber.substring(1);
-        } else if (!formattedNumber.startsWith('20')) {
+        } else if (!formattedNumber.startsWith('20') && !formattedNumber.startsWith('1')) {
+            formattedNumber = '20' + formattedNumber;
+        }
+        
+        // التأكد من أن الرقم يبدأ بـ 20 للأرقام المصرية
+        if (!formattedNumber.startsWith('20') && !formattedNumber.startsWith('1')) {
             formattedNumber = '20' + formattedNumber;
         }
         
