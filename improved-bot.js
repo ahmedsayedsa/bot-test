@@ -360,43 +360,78 @@ app.get("/", (req, res) => {
         if (!isWhatsappConnected && qrCodeData) {
             const html = `
             <!DOCTYPE html>
-            <html dir="rtl" lang="ar">
+            <html>
             <head>
                 <title>WhatsApp Bot - QR Code</title>
                 <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
                 <style>
-                    * { box-sizing: border-box; }
-                    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: linear-gradient(135deg, #25D366, #128C7E); text-align: center; padding: 20px; }
-                    .container { background: white; padding: 40px; border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.1); max-width: 450px; width: 100%; animation: slideUp 0.6s ease-out; }
-                    @keyframes slideUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
-                    img { border: 3px solid #25D366; border-radius: 15px; margin: 20px 0; max-width: 100%; height: auto; box-shadow: 0 8px 20px rgba(0,0,0,0.1); }
-                    .status { color: #25D366; font-weight: bold; font-size: 18px; margin: 15px 0; }
-                    h1 { color: #128C7E; margin-bottom: 10px; font-size: 28px; }
-                    h2 { color: #666; font-size: 18px; margin-bottom: 20px; }
-                    .loader { border: 4px solid #f3f3f3; border-top: 4px solid #25D366; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto; }
-                    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-                    .instructions { background: #f8f9fa; padding: 15px; border-radius: 10px; margin: 20px 0; font-size: 14px; color: #666; }
+                    body { 
+                        font-family: Arial, sans-serif; 
+                        display: flex; 
+                        flex-direction: column; 
+                        align-items: center; 
+                        justify-content: center; 
+                        min-height: 100vh; 
+                        margin: 0; 
+                        background: linear-gradient(135deg, #25D366, #128C7E);
+                        text-align: center;
+                        padding: 20px;
+                        box-sizing: border-box;
+                    }
+                    .container { 
+                        background: white; 
+                        padding: 40px; 
+                        border-radius: 15px; 
+                        box-shadow: 0 10px 30px rgba(0,0,0,0.2); 
+                        max-width: 400px;
+                        width: 100%;
+                        animation: fadeIn 0.5s ease-in;
+                    }
+                    @keyframes fadeIn {
+                        from { opacity: 0; transform: translateY(20px); }
+                        to { opacity: 1; transform: translateY(0); }
+                    }
+                    img { 
+                        border: 3px solid #25D366; 
+                        border-radius: 15px; 
+                        margin: 20px 0; 
+                        max-width: 100%;
+                        height: auto;
+                        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+                    }
+                    .status { 
+                        color: #25D366; 
+                        font-weight: bold; 
+                        font-size: 18px;
+                    }
+                    h1 { color: #128C7E; }
+                    .loader {
+                        border: 4px solid #f3f3f3;
+                        border-top: 4px solid #25D366;
+                        border-radius: 50%;
+                        width: 30px;
+                        height: 30px;
+                        animation: spin 2s linear infinite;
+                        margin: 20px auto;
+                    }
+                    @keyframes spin {
+                        0% { transform: rotate(0deg); }
+                        100% { transform: rotate(360deg); }
+                    }
                 </style>
                 <script>
-                    setTimeout(() => window.location.reload(), 10000);
+                    setTimeout(() => window.location.reload(), 5000);
                 </script>
             </head>
             <body>
                 <div class="container">
-                    <h1>🤖 بوت واتساب</h1>
+                    <h1>🤖 WhatsApp Bot</h1>
                     <h2>امسح الرمز باستخدام واتساب</h2>
                     <img src="${qrCodeData}" alt="QR Code">
                     <div class="loader"></div>
                     <p class="status">🔄 في انتظار المسح...</p>
-                    <div class="instructions">
-                        <strong>تعليمات:</strong><br>
-                        1. افتح واتساب على هاتفك<br>
-                        2. اذهب إلى الإعدادات > الأجهزة المرتبطة<br>
-                        3. اضغط على "ربط جهاز"<br>
-                        4. امسح الرمز أعلاه
-                    </div>
-                    <small>ستتم إعادة تحميل الصفحة تلقائياً كل 10 ثوان</small>
+                    <small>ستتم إعادة تحميل الصفحة تلقائياً</small>
                 </div>
             </body>
             </html>`;
@@ -404,63 +439,86 @@ app.get("/", (req, res) => {
         } else if (isWhatsappConnected) {
             const html = `
             <!DOCTYPE html>
-            <html dir="rtl" lang="ar">
+            <html>
             <head>
-                <title>WhatsApp Bot - متصل</title>
+                <title>WhatsApp Bot - Connected</title>
                 <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
                 <style>
-                    * { box-sizing: border-box; }
-                    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: linear-gradient(135deg, #25D366, #128C7E); color: white; text-align: center; padding: 20px; }
-                    .status-card { background: rgba(255,255,255,0.15); padding: 40px; border-radius: 20px; backdrop-filter: blur(10px); box-shadow: 0 15px 35px rgba(0,0,0,0.2); animation: pulse 3s infinite; max-width: 500px; width: 100%; }
-                    @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.02); } }
-                    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 20px; margin-top: 30px; }
-                    .stat-item { background: rgba(255,255,255,0.2); padding: 20px; border-radius: 15px; backdrop-filter: blur(5px); }
-                    .stat-number { font-size: 24px; font-weight: bold; margin-bottom: 5px; }
-                    .stat-label { font-size: 14px; opacity: 0.9; }
-                    h1 { font-size: 32px; margin-bottom: 10px; }
-                    .status-indicator { display: inline-block; width: 12px; height: 12px; background: #4CAF50; border-radius: 50%; margin-left: 10px; animation: blink 2s infinite; }
-                    @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0.3; } }
+                    body { 
+                        font-family: Arial, sans-serif; 
+                        display: flex; 
+                        flex-direction: column; 
+                        align-items: center; 
+                        justify-content: center; 
+                        min-height: 100vh; 
+                        margin: 0; 
+                        background: linear-gradient(135deg, #25D366, #128C7E);
+                        color: white; 
+                        text-align: center;
+                        padding: 20px;
+                        box-sizing: border-box;
+                    }
+                    .status-card {
+                        background: rgba(255,255,255,0.1);
+                        padding: 30px;
+                        border-radius: 15px;
+                        backdrop-filter: blur(10px);
+                        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+                        animation: pulse 2s infinite;
+                    }
+                    @keyframes pulse {
+                        0% { transform: scale(1); }
+                        50% { transform: scale(1.05); }
+                        100% { transform: scale(1); }
+                    }
+                    .stats {
+                        display: flex;
+                        gap: 20px;
+                        margin-top: 20px;
+                        flex-wrap: wrap;
+                        justify-content: center;
+                    }
+                    .stat-item {
+                        background: rgba(255,255,255,0.2);
+                        padding: 15px;
+                        border-radius: 10px;
+                        min-width: 120px;
+                    }
                 </style>
-                <script>
-                    setTimeout(() => window.location.reload(), 30000);
-                </script>
             </head>
             <body>
                 <div class="status-card">
-                    <h1>🤖 بوت واتساب</h1>
-                    <h2>✅ متصل ويعمل بنجاح <span class="status-indicator"></span></h2>
-                    <p>البوت جاهز لاستقبال الطلبات من Easy Order</p>
+                    <h1>✅ البوت متصل بنجاح!</h1>
+                    <p>🤖 WhatsApp Bot is running and ready</p>
+                    <p>📱 جاهز لاستقبال الطلبات من Easy Order</p>
+                    
                     <div class="stats">
                         <div class="stat-item">
-                            <div class="stat-number">${pendingOrders.size}</div>
-                            <div class="stat-label">طلبات معلقة</div>
+                            <div>📊 الطلبات المعلقة</div>
+                            <div>${pendingOrders.size}</div>
                         </div>
                         <div class="stat-item">
-                            <div class="stat-number">${Math.floor(process.uptime() / 60)}</div>
-                            <div class="stat-label">دقائق تشغيل</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-number">${connectionRetries}</div>
-                            <div class="stat-label">محاولات الاتصال</div>
+                            <div>⏱️ وقت التشغيل</div>
+                            <div>${Math.floor(process.uptime() / 60)} دقيقة</div>
                         </div>
                     </div>
-                    <p style="margin-top: 30px; font-size: 14px; opacity: 0.8;">
-                        آخر تحديث: ${new Date().toLocaleString('ar-EG')}
-                    </p>
                 </div>
             </body>
             </html>`;
             res.send(html);
         } else {
-            res.json({ status: "initializing", message: "البوت في مرحلة التهيئة...", connected: false, retries: connectionRetries });
+            res.json({
+                status: "🔄 Starting...",
+                connected: false,
+                message: "البوت يحاول الاتصال بواتساب..."
+            });
         }
     } catch (error) {
-        console.error('❌ Error on home page:', error);
-        res.status(500).json({ error: error.message });
+        console.error('❌ خطأ في الصفحة الرئيسية:', error);
+        res.status(500).json({ error: "خطأ في تحميل الصفحة" });
     }
 });
-
 // Route for Easy Order requests
 app.post("/send-order", async (req, res) => {
     if (!isWhatsappConnected) {
