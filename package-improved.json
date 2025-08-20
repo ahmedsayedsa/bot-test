@@ -1,0 +1,75 @@
+{
+  "name": "whatsapp-bot-easyorder-enhanced",
+  "version": "3.0.0",
+  "description": "بوت واتساب محسن للتكامل مع Easy Order مع أزرار تفاعلية ومعالجة أخطاء متقدمة",
+  "main": "improved-bot.js",
+  "scripts": {
+    "start": "node improved-bot.js",
+    "dev": "nodemon improved-bot.js",
+    "test": "node test.js",
+    "install-deps": "npm install",
+    "clean": "rm -rf node_modules package-lock.json && npm install",
+    "backup": "node -e \"console.log('Creating backup...'); require('fs').copyFileSync('auth_info', 'auth_backup_' + Date.now())\"",
+    "logs": "tail -f *.log"
+  },
+  "keywords": [
+    "whatsapp",
+    "bot",
+    "easyorder",
+    "baileys",
+    "express",
+    "webhook",
+    "interactive-buttons",
+    "order-management",
+    "arabic"
+  ],
+  "author": "Auto Service Team",
+  "license": "MIT",
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.5",
+    "express": "^4.18.2",
+    "body-parser": "^1.20.2",
+    "qrcode": "^1.5.3",
+    "axios": "^1.6.0",
+    "fs": "^0.0.1-security",
+    "crypto": "^1.0.1",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "morgan": "^1.10.0",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2",
+    "jest": "^29.7.0",
+    "supertest": "^6.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/auto-service/whatsapp-bot-easyorder.git"
+  },
+  "bugs": {
+    "url": "https://github.com/auto-service/whatsapp-bot-easyorder/issues"
+  },
+  "homepage": "https://github.com/auto-service/whatsapp-bot-easyorder#readme",
+  "config": {
+    "port": "3000",
+    "timeout": "30000"
+  },
+  "nodemonConfig": {
+    "ignore": [
+      "auth_info/*",
+      "*.log",
+      "pending_orders_backup.json",
+      "failed_updates.json"
+    ],
+    "ext": "js,json",
+    "env": {
+      "NODE_ENV": "development"
+    }
+  }
+}
+
