@@ -1,12 +1,11 @@
 {
-  "name": "whatsapp-bot-easyorder",
-  "version": "2.0.0",
-  "description": "WhatsApp Bot للتكامل مع Easy Order مع أزرار تفاعلية",
-  "main": "index.js",
+  "name": "whatsapp-bot-easyorder-enhanced",
+  "version": "3.0.0",
+  "description": "بوت واتساب محسن للتكامل مع Easy Order مع أزرار تفاعلية ومعالجة أخطاء متقدمة",
+  "main": "improved-bot.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js",
-    "test": "node test.js"
+    "start": "node improved-bot.js",
+    "dev": "nodemon improved-bot.js"
   },
   "keywords": [
     "whatsapp",
@@ -14,7 +13,10 @@
     "easyorder",
     "baileys",
     "express",
-    "webhook"
+    "webhook",
+    "interactive-buttons",
+    "order-management",
+    "arabic"
   ],
   "author": "Auto Service Team",
   "license": "MIT",
@@ -25,19 +27,14 @@
     "qrcode": "^1.5.3",
     "axios": "^1.6.0",
     "fs": "^0.0.1-security",
-    "crypto": "^1.0.1"
+    "crypto": "^1.0.1",
+    "dotenv": "^16.3.1"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
   },
   "engines": {
-    "node": ">=18.0.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/your-username/whatsapp-bot-easyorder.git"
-  },
-  "bugs": {
-    "url": "https://github.com/your-username/whatsapp-bot-easyorder/issues"
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
   }
 }
