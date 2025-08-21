@@ -48,6 +48,21 @@ const EASY_ORDER_API_KEY = process.env.EASY_ORDER_API_KEY || "your-api-key";
 // تخزين مؤقت للطلبات
 const pendingOrders = new Map();
 
+// دالة لتنسيق الوقت المحلي
+function getCurrentTime() {
+    const now = new Date();
+    // تحويل للتوقيت المحلي (GMT+2 مصر)
+    const localTime = new Date(now.getTime() + (2 * 60 * 60 * 1000));
+    return localTime.toLocaleString('ar-EG', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
 async function startBot() {
     try {
         console.log("🚀 بدء تشغيل البوت...");
@@ -59,7 +74,7 @@ async function startBot() {
             auth: state,
             version,
             printQRInTerminal: false,
-            browser: ["WhatsApp Bot", "Chrome", "4.0.0"],
+            browser: ["Auto Service Bot", "Chrome", "4.0.0"],
             connectTimeoutMs: 60000,
             defaultQueryTimeoutMs: 0,
             keepAliveIntervalMs: 10000,
@@ -147,9 +162,9 @@ async function startBot() {
                 
                 const orderData = pendingOrders.get(userPhone);
                 if (orderData) {
-                    if (text.toLowerCase().includes("موافق") || text.toLowerCase().includes("تم") || text.toLowerCase().includes("تأكيد")) {
+                    if (text.toLowerCase().includes("موافق") || text.toLowerCase().includes("تم") || text.toLowerCase().includes("تأكيد") || text.toLowerCase().includes("نعم")) {
                         await handleOrderConfirmation(userPhone, orderData, message.key.remoteJid, true);
-                    } else if (text.toLowerCase().includes("الغاء") || text.toLowerCase().includes("إلغاء") || text.toLowerCase().includes("رفض")) {
+                    } else if (text.toLowerCase().includes("الغاء") || text.toLowerCase().includes("إلغاء") || text.toLowerCase().includes("رفض") || text.toLowerCase().includes("لا")) {
                         await handleOrderConfirmation(userPhone, orderData, message.key.remoteJid, false);
                     }
                 }
@@ -180,24 +195,68 @@ async function handleButtonResponse(buttonId, userPhone, orderData, chatId) {
     }
 }
 
-// دالة لمعالجة تأكيد أو إلغاء الطلب
+// دالة لمعالجة تأكيد أو إلغاء الطلب - المحدثة
 async function handleOrderConfirmation(userPhone, orderData, chatId, isConfirmed) {
     try {
         let responseMessage = "";
         let orderStatus = "";
         
         if (isConfirmed) {
-            responseMessage = `✅ تم تأكيد طلبك بنجاح يا ${orderData.customerName}!\n\n` +
-                            `📦 سيتم تجهيز طلبك وشحنه خلال 24-48 ساعة\n` +
-                            `🚚 سيتم إرسال رقم الشحن قريباً\n` +
-                            `📞 للاستفسارات: اتصل بنا\n\n` +
-                            `شكراً لثقتك في اوتو سيرفس! 🙏`;
+            responseMessage = `✅ *تم تأكيد طلبك بنجاح يا ${orderData.customerName}!*
+
+🎉 *مبروك!* طلبك تم استلامه وتأكيده بنجاح
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 *تفاصيل الطلب المؤكد:*
+🆔 رقم الطلب: *#${orderData.orderId.toString().slice(-6)}*
+💰 الإجمالي: *${orderData.total} جنيه*
+⏰ تاريخ التأكيد: *${getCurrentTime()}*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 *الخطوات التالية:*
+• ⏳ سيتم تجهيز طلبك خلال 24-48 ساعة
+• 📦 سيتم تعبئة المنتجات بعناية فائقة
+• 🚚 سيتم شحن الطلب عبر شركة الشحن المختارة
+• 📱 سنرسل لك رقم الشحنة فور الإرسال
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+📞 *للتواصل والاستفسارات:*
+• واتساب: اضغط هنا للمحادثة المباشرة
+• الهاتف: متاح 24/7 لخدمتك
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+🌟 *اوتو سيرفس - Auto Service*
+*"خدمة احترافية.. جودة مضمونة.. ثقة متبادلة"*
+
+شكراً لثقتك الغالية فينا! 🙏❤️`;
             orderStatus = "confirmed";
         } else {
-            responseMessage = `❌ تم إلغاء طلبك يا ${orderData.customerName}\n\n` +
-                            `نأسف لعدم تمكننا من خدمتك هذه المرة\n` +
-                            `يمكنك تقديم طلب جديد في أي وقت\n\n` +
-                            `نتطلع لخدمتك قريباً 😔`;
+            responseMessage = `❌ *تم إلغاء طلبك يا ${orderData.customerName}*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+💔 نأسف لعدم تمكننا من خدمتك هذه المرة
+
+📋 *تفاصيل الطلب الملغي:*
+🆔 رقم الطلب: *#${orderData.orderId.toString().slice(-6)}*
+💰 كان المبلغ: *${orderData.total} جنيه*
+⏰ تاريخ الإلغاء: *${getCurrentTime()}*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 *يمكنك دائماً:*
+• 🛒 تقديم طلب جديد في أي وقت
+• 📞 الاتصال بنا للاستفسار عن المنتجات
+• 🌐 زيارة موقعنا لتصفح الكتالوج كاملاً
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+📞 *نحن هنا لخدمتك:*
+• واتساب: متاح 24/7
+• خدمة العملاء: جاهزون لمساعدتك
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+🌟 *اوتو سيرفس - Auto Service*
+*"نتطلع لخدمتك قريباً"*
+
+نشكرك على تواصلك معنا 🙏`;
             orderStatus = "cancelled";
         }
         
@@ -217,7 +276,7 @@ async function handleOrderConfirmation(userPhone, orderData, chatId, isConfirmed
         
         // إرسال رسالة خطأ
         await sock.sendMessage(chatId, { 
-            text: "❌ حدث خطأ في معالجة طلبك. يرجى المحاولة مرة أخرى أو الاتصال بالدعم." 
+            text: "❌ حدث خطأ تقني مؤقت في معالجة طلبك.\n\nيرجى المحاولة مرة أخرى أو التواصل معنا مباشرة.\n\n📞 نحن معك خطوة بخطوة!" 
         });
     }
 }
@@ -229,7 +288,7 @@ async function updateOrderStatusInEasyOrder(orderId, status, orderData) {
             order_id: orderId,
             status: status,
             updated_at: new Date().toISOString(),
-            notes: `تم ${status === 'confirmed' ? 'تأكيد' : 'إلغاء'} الطلب عبر WhatsApp Bot`
+            notes: `تم ${status === 'confirmed' ? 'تأكيد' : 'إلغاء'} الطلب عبر WhatsApp Bot في ${getCurrentTime()}`
         };
         
         console.log(`📤 تحديث حالة الطلب في Easy Order: ${orderId} -> ${status}`);
@@ -255,9 +314,6 @@ async function updateOrderStatusInEasyOrder(orderId, status, orderData) {
         
     } catch (error) {
         console.error(`❌ خطأ في تحديث Easy Order للطلب ${orderId}:`, error.message);
-        
-        // يمكن إضافة نظام إعادة المحاولة هنا
-        // أو حفظ الطلبات الفاشلة في قاعدة بيانات للمعالجة لاحقاً
     }
 }
 
@@ -293,76 +349,111 @@ app.get("/", (req, res) => {
             <!DOCTYPE html>
             <html>
             <head>
-                <title>WhatsApp Bot - QR Code</title>
+                <title>Auto Service WhatsApp Bot - QR Code</title>
                 <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
                 <style>
                     body { 
-                        font-family: Arial, sans-serif; 
+                        font-family: 'Cairo', Arial, sans-serif; 
                         display: flex; 
                         flex-direction: column; 
                         align-items: center; 
                         justify-content: center; 
                         min-height: 100vh; 
                         margin: 0; 
-                        background: linear-gradient(135deg, #25D366, #128C7E);
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                         text-align: center;
                         padding: 20px;
                         box-sizing: border-box;
                     }
                     .container { 
-                        background: white; 
+                        background: rgba(255,255,255,0.95); 
                         padding: 40px; 
-                        border-radius: 15px; 
-                        box-shadow: 0 10px 30px rgba(0,0,0,0.2); 
-                        max-width: 400px;
+                        border-radius: 20px; 
+                        box-shadow: 0 20px 40px rgba(0,0,0,0.1); 
+                        max-width: 450px;
                         width: 100%;
-                        animation: fadeIn 0.5s ease-in;
+                        animation: fadeIn 0.6s ease-in;
+                        backdrop-filter: blur(10px);
                     }
                     @keyframes fadeIn {
-                        from { opacity: 0; transform: translateY(20px); }
+                        from { opacity: 0; transform: translateY(30px); }
                         to { opacity: 1; transform: translateY(0); }
                     }
+                    .logo { 
+                        font-size: 2.5em; 
+                        color: #667eea; 
+                        margin-bottom: 10px;
+                        font-weight: bold;
+                    }
                     img { 
-                        border: 3px solid #25D366; 
-                        border-radius: 15px; 
-                        margin: 20px 0; 
+                        border: 4px solid #667eea; 
+                        border-radius: 20px; 
+                        margin: 25px 0; 
                         max-width: 100%;
                         height: auto;
-                        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+                        box-shadow: 0 10px 30px rgba(0,0,0,0.15);
                     }
                     .status { 
-                        color: #25D366; 
+                        color: #667eea; 
                         font-weight: bold; 
                         font-size: 18px;
+                        margin: 20px 0;
                     }
-                    h1 { color: #128C7E; }
+                    .brand {
+                        color: #764ba2;
+                        font-size: 1.8em;
+                        font-weight: bold;
+                        margin-bottom: 5px;
+                    }
+                    .tagline {
+                        color: #666;
+                        font-size: 14px;
+                        margin-bottom: 20px;
+                    }
                     .loader {
                         border: 4px solid #f3f3f3;
-                        border-top: 4px solid #25D366;
+                        border-top: 4px solid #667eea;
                         border-radius: 50%;
-                        width: 30px;
-                        height: 30px;
-                        animation: spin 2s linear infinite;
+                        width: 40px;
+                        height: 40px;
+                        animation: spin 1.5s linear infinite;
                         margin: 20px auto;
                     }
                     @keyframes spin {
                         0% { transform: rotate(0deg); }
                         100% { transform: rotate(360deg); }
                     }
+                    .instructions {
+                        background: #f8f9ff;
+                        padding: 20px;
+                        border-radius: 15px;
+                        margin: 20px 0;
+                        color: #555;
+                        font-size: 14px;
+                    }
                 </style>
                 <script>
-                    setTimeout(() => window.location.reload(), 5000);
+                    setTimeout(() => window.location.reload(), 8000);
                 </script>
             </head>
             <body>
                 <div class="container">
-                    <h1>🤖 WhatsApp Bot</h1>
-                    <h2>امسح الرمز باستخدام واتساب</h2>
+                    <div class="logo">🤖</div>
+                    <div class="brand">اوتو سيرفس</div>
+                    <div class="tagline">Auto Service WhatsApp Bot</div>
+                    
+                    <div class="instructions">
+                        <h3>خطوات التفعيل:</h3>
+                        <p>1️⃣ افتح واتساب على هاتفك</p>
+                        <p>2️⃣ اضغط على النقاط الثلاث ← الأجهزة المرتبطة</p>
+                        <p>3️⃣ اضغط "ربط جهاز" وامسح الكود أدناه</p>
+                    </div>
+                    
                     <img src="${qrCodeData}" alt="QR Code">
                     <div class="loader"></div>
-                    <p class="status">🔄 في انتظار المسح...</p>
-                    <small>ستتم إعادة تحميل الصفحة تلقائياً</small>
+                    <p class="status">🔄 في انتظار المسح الضوئي...</p>
+                    <small style="color: #888;">سيتم تحديث الصفحة تلقائياً كل 8 ثوان</small>
                 </div>
             </body>
             </html>`;
@@ -372,68 +463,125 @@ app.get("/", (req, res) => {
             <!DOCTYPE html>
             <html>
             <head>
-                <title>WhatsApp Bot - Connected</title>
+                <title>Auto Service Bot - Connected</title>
                 <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
                 <style>
                     body { 
-                        font-family: Arial, sans-serif; 
+                        font-family: 'Cairo', Arial, sans-serif; 
                         display: flex; 
                         flex-direction: column; 
                         align-items: center; 
                         justify-content: center; 
                         min-height: 100vh; 
                         margin: 0; 
-                        background: linear-gradient(135deg, #25D366, #128C7E);
+                        background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
                         color: white; 
                         text-align: center;
                         padding: 20px;
                         box-sizing: border-box;
                     }
                     .status-card {
-                        background: rgba(255,255,255,0.1);
-                        padding: 30px;
-                        border-radius: 15px;
-                        backdrop-filter: blur(10px);
-                        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-                        animation: pulse 2s infinite;
+                        background: rgba(255,255,255,0.15);
+                        padding: 40px;
+                        border-radius: 20px;
+                        backdrop-filter: blur(15px);
+                        box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+                        animation: pulse 3s infinite;
+                        border: 1px solid rgba(255,255,255,0.2);
                     }
                     @keyframes pulse {
                         0% { transform: scale(1); }
-                        50% { transform: scale(1.05); }
+                        50% { transform: scale(1.02); }
                         100% { transform: scale(1); }
                     }
+                    .success-icon {
+                        font-size: 4em;
+                        margin-bottom: 20px;
+                        animation: bounce 2s infinite;
+                    }
+                    @keyframes bounce {
+                        0%, 20%, 50%, 80%, 100% {
+                            transform: translateY(0);
+                        }
+                        40% {
+                            transform: translateY(-10px);
+                        }
+                        60% {
+                            transform: translateY(-5px);
+                        }
+                    }
+                    .brand-title {
+                        font-size: 2.5em;
+                        font-weight: bold;
+                        margin-bottom: 10px;
+                    }
                     .stats {
-                        display: flex;
+                        display: grid;
+                        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
                         gap: 20px;
-                        margin-top: 20px;
-                        flex-wrap: wrap;
-                        justify-content: center;
+                        margin: 30px 0;
+                        max-width: 600px;
                     }
                     .stat-item {
                         background: rgba(255,255,255,0.2);
-                        padding: 15px;
-                        border-radius: 10px;
-                        min-width: 120px;
+                        padding: 20px;
+                        border-radius: 15px;
+                        border: 1px solid rgba(255,255,255,0.3);
+                    }
+                    .stat-number {
+                        font-size: 2em;
+                        font-weight: bold;
+                        margin-bottom: 5px;
+                    }
+                    .features {
+                        margin: 30px 0;
+                        text-align: left;
+                        background: rgba(255,255,255,0.1);
+                        padding: 20px;
+                        border-radius: 15px;
+                    }
+                    .feature-item {
+                        margin: 10px 0;
+                        padding: 10px;
+                        border-left: 3px solid rgba(255,255,255,0.5);
+                        padding-left: 15px;
                     }
                 </style>
             </head>
             <body>
                 <div class="status-card">
-                    <h1>✅ البوت متصل بنجاح!</h1>
-                    <p>🤖 WhatsApp Bot is running and ready</p>
-                    <p>📱 جاهز لاستقبال الطلبات من Easy Order</p>
+                    <div class="success-icon">✅</div>
+                    <div class="brand-title">اوتو سيرفس</div>
+                    <h2>البوت متصل بنجاح!</h2>
+                    <p style="font-size: 1.2em;">🤖 Auto Service Bot is Live & Ready</p>
                     
                     <div class="stats">
                         <div class="stat-item">
+                            <div class="stat-number">${pendingOrders.size}</div>
                             <div>📊 الطلبات المعلقة</div>
-                            <div>${pendingOrders.size}</div>
                         </div>
                         <div class="stat-item">
-                            <div>⏱️ وقت التشغيل</div>
-                            <div>${Math.floor(process.uptime() / 60)} دقيقة</div>
+                            <div class="stat-number">${Math.floor(process.uptime() / 60)}</div>
+                            <div>⏱️ دقائق التشغيل</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number">${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB</div>
+                            <div>💾 استخدام الذاكرة</div>
                         </div>
                     </div>
+                    
+                    <div class="features">
+                        <h3>🚀 الميزات النشطة:</h3>
+                        <div class="feature-item">📱 استقبال طلبات Easy Order</div>
+                        <div class="feature-item">✅ تأكيد الطلبات التلقائي</div>
+                        <div class="feature-item">🔔 إشعارات فورية للعملاء</div>
+                        <div class="feature-item">📊 مراقبة الأداء المباشر</div>
+                    </div>
+                    
+                    <p style="font-size: 0.9em; opacity: 0.8; margin-top: 20px;">
+                        "خدمة احترافية.. جودة مضمونة.. ثقة متبادلة"
+                    </p>
                 </div>
             </body>
             </html>`;
@@ -464,7 +612,7 @@ app.get("/status", (req, res) => {
     });
 });
 
-// Webhook لاستقبال طلبات Easy Order (محدث)
+// Webhook لاستقبال طلبات Easy Order (محدث مع رسالة أفضل)
 app.post("/webhook", async (req, res) => {
     console.log("\n" + "🔥".repeat(50));
     console.log("📩 WEBHOOK HIT! استلمنا request من Easy Order:");
@@ -563,17 +711,17 @@ app.post("/webhook", async (req, res) => {
                     price = item.product.price;
                 }
                 
-                // تنسيق السطر
-                let line = `• ${name}`;
+                // تنسيق السطر مع رموز تعبيرية أجمل
+                let line = `🔹 *${name}*`;
                 if (qty > 1) {
-                    line += `: ${qty} قطعة`;
+                    line += ` (${qty} قطعة)`;
                 }
                 if (price) {
-                    line += ` (${price} ج.م${qty > 1 ? ' للقطعة' : ''})`;
+                    line += `\n   💰 ${price} جنيه${qty > 1 ? ' للقطعة الواحدة' : ''}`;
                 }
                 
                 return line;
-            }).join("\n");
+            }).join("\n\n");
         }
         
         // حساب المجموع إذا لم يكن موجود
@@ -586,33 +734,57 @@ app.post("/webhook", async (req, res) => {
                 calculatedTotal += (qty * price);
             });
             if (calculatedTotal > 0) {
-                total = calculatedTotal;
+                orderData.total = calculatedTotal + " جنيه";
             }
         }
         
-        // صياغة الرسالة مع الأزرار (محسنة)
-        let message = `🌟 أهلاً وسهلاً ${customerName}\n\n` +
-                     `شكرًا لاختيارك اوتو سيرفس! تم استلام طلبك بنجاح 🎉\n\n` +
-                     `🆔 رقم الطلب: #${orderId.toString().slice(-6)}\n\n`;
+        // الرسالة المحدثة والأكثر احترافية
+        let message = `🌟 *أهلاً وسهلاً بك ${customerName}*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+🎉 *مبروك! تم استلام طلبك بنجاح*
+
+شكراً لاختيارك *اوتو سيرفس* - ثقتك أمانة عندنا! ❤️
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 *تفاصيل طلبك:*
+🆔 رقم الطلب: *#AS${orderId.toString().slice(-6)}*
+⏰ وقت الطلب: *${getCurrentTime()}*
+
+`;
         
         if (itemsList) {
-            message += `🛍️ تفاصيل الطلب:\n${itemsList}\n\n`;
+            message += `🛍️ *المنتجات المطلوبة:*\n${itemsList}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
         }
         
-        message += `💰 الإجمالي: ${total} ج.م\n`;
+        message += `💰 *الإجمالي: ${orderData.total}*\n`;
         
         if (address && address !== "غير محدد") {
-            message += `📍 عنوان التوصيل: ${address}\n`;
+            message += `📍 *عنوان التوصيل:* ${address}\n`;
         }
         
-        message += `\n⚠️ ملاحظة مهمة: المعاينة غير متاحة وقت الاستلام\n` +
-                  `🔄 يُرجى تأكيد طلبك للبدء في التحضير والشحن:`;
+        message += `
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️ *ملاحظة مهمة جداً:*
+• 🚫 *المعاينة غير متاحة وقت الاستلام*
+• ✅ يُرجى التأكد من طلبك قبل التأكيد
+• 📦 سيتم تعبئة طلبك بعناية فائقة
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 *يُرجى تأكيد طلبك للبدء فوراً في:*
+• 📦 التحضير والتعبئة المتخصصة
+• 🚚 الشحن السريع والآمن
+• 📱 إرسال رقم الشحنة للمتابعة
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+🌟 *اوتو سيرفس - Auto Service*
+*"خدمة احترافية.. جودة مضمونة.. ثقة متبادلة"*`;
 
         // إنشاء الأزرار التفاعلية المحسنة
         const buttons = [
             {
                 buttonId: 'confirm_order',
-                buttonText: { displayText: '✅ تأكيد الطلب' },
+                buttonText: { displayText: '✅ تأكيد الطلب والشحن' },
                 type: 1
             },
             {
@@ -659,13 +831,13 @@ app.post("/webhook", async (req, res) => {
 
         console.log(`✅ تم إرسال الطلب مع الأزرار للعميل بنجاح على ${formattedNumber}`);
         
-        // إعداد timeout لحذف الطلب بعد ساعة إذا لم يتم الرد
+        // إعداد timeout لحذف الطلب بعد ساعتين إذا لم يتم الرد
         setTimeout(() => {
             if (pendingOrders.has(phoneKey)) {
                 console.log(`⏰ انتهت صلاحية الطلب ${orderId} - حذف من الذاكرة`);
                 pendingOrders.delete(phoneKey);
             }
-        }, 60 * 60 * 1000); // ساعة واحدة
+        }, 2 * 60 * 60 * 1000); // ساعتان
         
         res.json({ 
             success: true, 
@@ -724,10 +896,33 @@ app.post("/cancel-order/:orderId", async (req, res) => {
         // إلغاء الطلب
         await updateOrderStatusInEasyOrder(orderId, 'cancelled', orderData);
         
-        // إرسال رسالة إلغاء للعميل
+        // إرسال رسالة إلغاء محسنة للعميل
         const formattedNumber = `20${phoneKey}@s.whatsapp.net`;
         await sock.sendMessage(formattedNumber, {
-            text: `❌ تم إلغاء طلبك رقم ${orderId} من قِبل الإدارة.\nنأسف لأي إزعاج قد يكون حدث.`
+            text: `❌ *تم إلغاء طلبك من قِبل الإدارة*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 *تفاصيل الطلب الملغي:*
+🆔 رقم الطلب: *#AS${orderId.toString().slice(-6)}*
+👤 العميل: *${orderData.customerName}*
+⏰ تاريخ الإلغاء: *${getCurrentTime()}*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+💔 نأسف بشدة لهذا الإجراء
+
+🔄 *أسباب محتملة للإلغاء:*
+• نفاد المنتج من المخزون
+• مشكلة تقنية في النظام  
+• تعديل في بيانات الطلب
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+📞 *للاستفسار والمساعدة:*
+• اتصل بنا فوراً للتوضيح
+• يمكنك إعادة الطلب في أي وقت
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+🌟 *اوتو سيرفس - Auto Service*
+نعتذر بصدق ونتطلع لخدمتك قريباً 🙏`
         });
 
         // حذف من الذاكرة
@@ -790,7 +985,7 @@ app.post("/test-send", async (req, res) => {
     }
 });
 
-// Health check لـ Render
+// Health check لـ Google Cloud
 app.get("/health", (req, res) => {
     res.json({ 
         status: "OK", 
@@ -798,7 +993,8 @@ app.get("/health", (req, res) => {
         memory: process.memoryUsage(),
         connected: isWhatsappConnected,
         timestamp: new Date().toISOString(),
-        pendingOrders: pendingOrders.size
+        pendingOrders: pendingOrders.size,
+        service: "Auto Service WhatsApp Bot"
     });
 });
 
@@ -820,7 +1016,7 @@ app.post("/restart", (req, res) => {
             startBot();
         }, 2000);
         
-        res.json({ success: true, message: "تم إعادة تشغيل البوت" });
+        res.json({ success: true, message: "تم إعادة تشغيل البوت بنجاح" });
     } catch (error) {
         console.error('❌ خطأ في إعادة التشغيل:', error);
         res.status(500).json({ error: error.message });
@@ -836,14 +1032,17 @@ app.get("/stats", (req, res) => {
         .filter(order => new Date(order.timestamp).getTime() > oneHourAgo);
     
     res.json({
+        service: "Auto Service WhatsApp Bot",
         server: {
             uptime: process.uptime(),
             memory: process.memoryUsage(),
-            pid: process.pid
+            pid: process.pid,
+            nodeVersion: process.version
         },
         whatsapp: {
             connected: isWhatsappConnected,
-            hasQR: !!qrCodeData
+            hasQR: !!qrCodeData,
+            lastConnection: isWhatsappConnected ? new Date().toISOString() : null
         },
         orders: {
             total_pending: pendingOrders.size,
@@ -852,7 +1051,7 @@ app.get("/stats", (req, res) => {
                 Math.min(...Array.from(pendingOrders.values())
                     .map(order => new Date(order.timestamp).getTime())) : null
         },
-        timestamp: new Date().toISOString()
+        timestamp: getCurrentTime()
     });
 });
 
@@ -886,11 +1085,24 @@ app.post("/broadcast", async (req, res) => {
         for (const phone of targetPhones) {
             try {
                 const formattedNumber = `20${phone}@s.whatsapp.net`;
-                await sock.sendMessage(formattedNumber, { text: message });
+                
+                // رسالة إشعار محسنة
+                const broadcastMessage = `🔔 *إشعار من اوتو سيرفس*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+${message}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+📅 *تاريخ الإشعار:* ${getCurrentTime()}
+
+🌟 *اوتو سيرفس - Auto Service*
+شكراً لثقتك الدائمة بنا ❤️`;
+                
+                await sock.sendMessage(formattedNumber, { text: broadcastMessage });
                 results.push({ phone, success: true });
                 
                 // تأخير قصير بين الرسائل لتجنب الحظر
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                await new Promise(resolve => setTimeout(resolve, 2000));
             } catch (error) {
                 results.push({ phone, success: false, error: error.message });
             }
@@ -957,7 +1169,7 @@ process.on('unhandledRejection', (reason, promise) => {
 process.on('SIGTERM', () => {
     console.log('🛑 SIGTERM received, closing gracefully...');
     
-    // حفظ الطلبات المعلقة قبل الإغلاق (اختياري)
+    // حفظ الطلبات المعلقة قبل الإغلاق
     if (pendingOrders.size > 0) {
         try {
             const ordersBackup = Array.from(pendingOrders.entries());
@@ -982,7 +1194,7 @@ process.on('SIGINT', () => {
     process.exit(0);
 });
 
-// دالة لاستعادة الطلبات المعلقة عند بدء التشغيل (اختياري)
+// دالة لاستعادة الطلبات المعلقة عند بدء التشغيل
 function restorePendingOrders() {
     try {
         if (fs.existsSync('pending_orders_backup.json')) {
@@ -991,9 +1203,9 @@ function restorePendingOrders() {
             let restoredCount = 0;
             
             for (const [phone, orderData] of backupData) {
-                // استعادة الطلبات التي لا تزال صالحة (أقل من 24 ساعة)
+                // استعادة الطلبات التي لا تزال صالحة (أقل من 48 ساعة)
                 const orderTime = new Date(orderData.timestamp).getTime();
-                if (now - orderTime < 24 * 60 * 60 * 1000) {
+                if (now - orderTime < 48 * 60 * 60 * 1000) {
                     pendingOrders.set(phone, orderData);
                     restoredCount++;
                 }
@@ -1016,9 +1228,10 @@ const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 
 app.listen(PORT, HOST, () => {
-    console.log(`🚀 Server شغال على http://${HOST}:${PORT}`);
+    console.log(`🚀 Auto Service WhatsApp Bot شغال على http://${HOST}:${PORT}`);
     console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`📊 Memory Usage:`, process.memoryUsage());
+    console.log(`⏰ Server Start Time: ${getCurrentTime()}`);
     
     // استعادة الطلبات المعلقة
     restorePendingOrders();
@@ -1026,16 +1239,16 @@ app.listen(PORT, HOST, () => {
     // بدء البوت بعد تشغيل الخادم
     setTimeout(() => {
         startBot();
-    }, 2000);
+    }, 3000);
     
-    // تنظيف دوري للطلبات منتهية الصلاحية (كل 6 ساعات)
+    // تنظيف دوري للطلبات منتهية الصلاحية (كل 4 ساعات)
     setInterval(() => {
         const now = Date.now();
         let cleanedCount = 0;
         
         for (const [phone, orderData] of pendingOrders.entries()) {
             const orderTime = new Date(orderData.timestamp).getTime();
-            if (now - orderTime > 24 * 60 * 60 * 1000) { // 24 ساعة
+            if (now - orderTime > 48 * 60 * 60 * 1000) { // 48 ساعة
                 pendingOrders.delete(phone);
                 cleanedCount++;
             }
@@ -1044,5 +1257,5 @@ app.listen(PORT, HOST, () => {
         if (cleanedCount > 0) {
             console.log(`🗑️ تنظيف تلقائي: تم حذف ${cleanedCount} طلب منتهي الصلاحية`);
         }
-    }, 6 * 60 * 60 * 1000); // كل 6 ساعات
+    }, 4 * 60 * 60 * 1000); // كل 4 ساعات
 });
