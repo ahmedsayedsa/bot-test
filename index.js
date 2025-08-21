@@ -2,18 +2,13 @@
 const express = require("express");
 const bodyParser = require("body-parser");
 const fs = require("fs");
-const crypto = require("crypto");
+const { createHash, randomBytes } = require("crypto"); // استخدام Node.js built-in crypto
 const axios = require("axios"); // لإرسال طلبات HTTP إلى Easy Order
-
-// إضافة crypto polyfill للـ global scope
-global.crypto = crypto;
-if (crypto.webcrypto) {
-    global.crypto.webcrypto = crypto.webcrypto;
-}
 
 const makeWASocket = require("@whiskeysockets/baileys").default;
 const { useMultiFileAuthState, fetchLatestBaileysVersion } = require("@whiskeysockets/baileys");
 const qrcode = require("qrcode");
+const QRTerminal = require('qrcode-terminal'); // مكتبة عرض QR في الترمينال
 
 // دالة لتنظيف HTML وتحويله لنص عادي
 function stripHtml(html) {
@@ -73,7 +68,7 @@ async function startBot() {
         sock = makeWASocket({
             auth: state,
             version,
-            printQRInTerminal: false,
+            printQRInTerminal: true, // تفعيل عرض QR في الترمينال
             browser: ["Auto Service Bot", "Chrome", "4.0.0"],
             connectTimeoutMs: 60000,
             defaultQueryTimeoutMs: 0,
@@ -92,7 +87,23 @@ async function startBot() {
             if (qr) {
                 try {
                     qrCodeData = await qrcode.toDataURL(qr);
-                    console.log('📡 تم إنشاء QR code جديد');
+                    
+                    // عرض QR محسن في الترمينال
+                    console.log('\n' + '🎯'.repeat(30));
+                    console.log('📱 QR CODE للاتصال بواتساب');
+                    console.log('🎯'.repeat(30));
+                    
+                    // عرض QR في الترمينال بشكل مرئي
+                    QRTerminal.generate(qr, { small: true });
+                    
+                    console.log('📋 خطوات الاتصال:');
+                    console.log('1️⃣ افتح واتساب على هاتفك');
+                    console.log('2️⃣ اضغط على النقاط الثلاث (⋮) في الأعلى');
+                    console.log('3️⃣ اختر "الأجهزة المرتبطة"');
+                    console.log('4️⃣ اضغط "ربط جهاز"');
+                    console.log('5️⃣ امسح الكود أعلاه ضوئياً');
+                    console.log('🎯'.repeat(30) + '\n');
+                    
                     fs.writeFileSync('qr.txt', qr);
                 } catch (qrError) {
                     console.error('❌ خطأ في إنشاء QR:', qrError);
@@ -106,12 +117,14 @@ async function startBot() {
                 isWhatsappConnected = false;
                 
                 if (shouldReconnect) {
+                    console.log('🔄 إعادة محاولة الاتصال خلال 10 ثوان...');
                     setTimeout(() => startBot(), 10000);
                 } else {
                     console.log('❌ البوت محتاج تسجيل دخول جديد');
                     try {
                         if (fs.existsSync("auth_info")) {
                             fs.rmSync("auth_info", { recursive: true, force: true });
+                            console.log('🗑️ تم مسح بيانات المصادقة القديمة');
                         }
                     } catch (cleanupError) {
                         console.error('❌ خطأ في حذف auth_info:', cleanupError);
@@ -119,7 +132,14 @@ async function startBot() {
                     setTimeout(() => startBot(), 5000);
                 }
             } else if (connection === 'open') {
-                console.log('✅ البوت متصل بواتساب بنجاح!');
+                console.log('\n' + '✅'.repeat(30));
+                console.log('🎉 البوت متصل بواتساب بنجاح! 🎉');
+                console.log('✅'.repeat(30));
+                console.log('🚀 البوت جاهز لاستقبال الطلبات');
+                console.log('🌐 يمكنك زيارة الموقع لمراقبة الحالة');
+                console.log('📊 رابط المراقبة: http://localhost:' + (process.env.PORT || 3000));
+                console.log('✅'.repeat(30) + '\n');
+                
                 isWhatsappConnected = true;
                 qrCodeData = null;
                 
@@ -195,7 +215,7 @@ async function handleButtonResponse(buttonId, userPhone, orderData, chatId) {
     }
 }
 
-// دالة لمعالجة تأكيد أو إلغاء الطلب - المحدثة
+// دالة لمعالجة تأكيد أو إلغاء الطلب
 async function handleOrderConfirmation(userPhone, orderData, chatId, isConfirmed) {
     try {
         let responseMessage = "";
@@ -612,7 +632,7 @@ app.get("/status", (req, res) => {
     });
 });
 
-// Webhook لاستقبال طلبات Easy Order (محدث مع رسالة أفضل)
+// Webhook لاستقبال طلبات Easy Order
 app.post("/webhook", async (req, res) => {
     console.log("\n" + "🔥".repeat(50));
     console.log("📩 WEBHOOK HIT! استلمنا request من Easy Order:");
