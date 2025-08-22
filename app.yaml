@@ -1,0 +1,13 @@
+runtime: nodejs18
+
+handlers:
+- url: /admin
+  static_files: public/admin.html
+  upload: public/admin.html
+
+- url: /user  
+  static_files: public/user.html
+  upload: public/user.html
+
+- url: /.*
+  script: auto
