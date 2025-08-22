@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <title>صفحة العميل</title>
+</head>
+<body>
+  <h1>✍️ تخصيص الرسالة</h1>
+  <form action="/api/save-message" method="post">
+    <textarea name="message" rows="5" cols="40" placeholder="اكتب رسالتك هنا..."></textarea>
+    <br>
+    <button type="submit">💾 حفظ الرسالة</button>
+  </form>
+  <p>ملاحظات: 
+    <br>- اكتب <b>{{name}}</b> مكان اسم العميل.
+    <br>- اكتب <b>{{orderId}}</b> مكان رقم الطلب.
+  </p>
+</body>
+</html>

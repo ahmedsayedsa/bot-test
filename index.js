@@ -1,4 +1,6 @@
-\
+import express from "express";
+import path from "path";
+import { fileURLToPath } from "url";
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
@@ -17,6 +19,28 @@ if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 
 const DB_PATH = path.join(DATA_DIR, 'orders.db');
 const db = new sqlite3.Database(DB_PATH);
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+
+// نخلي السيرفر يعرف يدي ملفات HTML
+app.use(express.static(path.join(__dirname, "views")));
+
+app.get("/admin", (req, res) => {
+  res.sendFile(path.join(__dirname, "views", "admin.html"));
+});
+
+app.get("/user/:id", (req, res) => {
+  res.sendFile(path.join(__dirname, "views", "user.html"));
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`✅ Server running on port ${PORT}`);
+});
+
 db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS orders (
     id TEXT PRIMARY KEY,
