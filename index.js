@@ -1,74 +1,73 @@
-// index.js
-const express = require("express")
-const makeWASocket = require("@whiskeysockets/baileys").default
-const { useMultiFileAuthState } = require("@whiskeysockets/baileys")
-const pino = require("pino")
+import express from "express";
+import makeWASocket, { useMultiFileAuthState } from "@whiskeysockets/baileys";
+import qrcode from "qrcode-terminal";
 
-const app = express()
-app.use(express.json())
+const app = express();
+app.use(express.json());
 
-let sock
+let sock;
 
-// 🚀 تشغيل واتساب بوت
+// ====== تهيئة واتساب ======
 async function startBot() {
-    const { state, saveCreds } = await useMultiFileAuthState("session")
-    sock = makeWASocket({
-        auth: state,
-        printQRInTerminal: true,
-        logger: pino({ level: "silent" })
-    })
+  const { state, saveCreds } = await useMultiFileAuthState("auth_info");
+  sock = makeWASocket({
+    auth: state,
+    printQRInTerminal: true,
+  });
 
-    sock.ev.on("creds.update", saveCreds)
+  sock.ev.on("creds.update", saveCreds);
 
-    sock.ev.on("connection.update", (update) => {
-        const { connection, qr } = update
-        if (qr) {
-            console.log("📌 اعمل سكان للكود ده بالواتساب:", qr)
-        }
-        if (connection === "open") {
-            console.log("✅ البوت متصل بالواتساب")
-        }
-    })
+  sock.ev.on("connection.update", (update) => {
+    const { connection, qr } = update;
+    if (qr) {
+      qrcode.generate(qr, { small: true });
+    }
+    console.log("🔄 اتصال:", connection);
+  });
 }
 
-// 📩 API لإرسال رسالة تأكيد الطلب
-app.post("/send-order", async (req, res) => {
-    const { number, name, orderId, items, total, address } = req.body
-    if (!sock) return res.status(500).json({ error: "⚠️ البوت مش متصل بالواتساب" })
+// ====== استقبال Webhook من EasyOrder ======
+app.post("/webhook", async (req, res) => {
+  console.log("📩 Webhook request received:", JSON.stringify(req.body, null, 2));
 
-    try {
-        const jid = number.includes("@s.whatsapp.net") ? number : `${number}@s.whatsapp.net`
+  const order = req.body;
 
-        // ✨ الرسالة المخصصة
-        const messageText = `
-🌟 أهلاً وسهلاً ${name}
+  if (!order.customer_phone) {
+    console.log("❌ No customer phone in order data");
+    return res.sendStatus(400);
+  }
+
+  // نص الرسالة المخصص
+  const msg = `
+🌟 أهلاً وسهلاً ${order.customer_name || "عميلنا العزيز"}
 
 شكرًا لاختيارك اوتو سيرفس! تم استلام طلبك بنجاح 🎉
 
-🆔 رقم الطلب: #${orderId}
+🆔 رقم الطلب: #${order.order_id || "N/A"}
 
 🛍️ تفاصيل الطلب:
-${items.map(item => `* ${item}`).join("\n")}
+${order.items?.map(i => `* ${i.name} (${i.price})`).join("\n") || "لا يوجد منتجات"}
 
-💰 الإجمالي: ${total}
-📍 عنوان التوصيل: ${address}
+💰 الإجمالي: ${order.total || "غير محدد"}
+📍 عنوان التوصيل: ${order.address || "غير متوفر"}
 
 ⚠️ ملاحظة مهمة: المعاينة غير متاحة وقت الاستلام
 🔄 يُرجى تأكيد طلبك للبدء في التحضير والشحن
-        `.trim()
+`;
 
-        await sock.sendMessage(jid, { text: messageText })
+  try {
+    await sock.sendMessage(order.customer_phone + "@s.whatsapp.net", { text: msg });
+    console.log("✅ رسالة اتبعت للعميل:", order.customer_phone);
+  } catch (e) {
+    console.error("❌ فشل في إرسال الرسالة:", e);
+  }
 
-        console.log("📨 تم إرسال الرسالة:", messageText)
-        res.json({ success: true, sent: messageText })
-    } catch (err) {
-        console.error("❌ خطأ أثناء الإرسال:", err)
-        res.status(500).json({ error: "فشل الإرسال" })
-    }
-})
+  res.sendStatus(200);
+});
 
-const PORT = process.env.PORT || 5000
+// ====== تشغيل السيرفر ======
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`🚀 Webhook server شغال على http://localhost:${PORT}`)
-    startBot()
-})
+  console.log(`🚀 Server running on port ${PORT}`);
+  startBot();
+});
