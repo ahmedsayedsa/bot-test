@@ -16,7 +16,11 @@ app.use('/user', authMiddleware.ensureUser, require('./routes/user'));
 
 app.get('/login', (req, res) => res.render('login'));
 app.post('/login', require('./routes/user').login);
-
+app.get('/login', (req, res) => {
+  console.log('Reached GET /login');
+  res.render('login');
+});
+app.post('/login', require('./routes/user').login);
 app.get('/dashboard', authMiddleware.ensureUser, (req, res) => res.redirect('/user/dashboard'));
 
 const PORT = process.env.PORT || 3000;
