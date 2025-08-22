@@ -2,7 +2,7 @@ const express = require('express');
 const path = require('path');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 
 // Test route أول
 app.get('/', (req, res) => {
@@ -31,5 +31,6 @@ app.use('*', (req, res) => {
 
 app.listen(PORT, () => {
     console.log(`🚀 Server running on http://localhost:${PORT}`);
+    console.log(`🌐 Try: http://localhost:${PORT}/admin`);
     console.log(`📁 Static files from: ${path.join(__dirname, 'public')}`);
 });
