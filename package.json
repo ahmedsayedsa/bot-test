@@ -1,42 +1,15 @@
 {
-  "name": "auto-service-whatsapp-bot",
+  "name": "whatsapp-bot",
   "version": "1.0.0",
-  "description": "WhatsApp Bot for Auto Service orders from Easy Order",
   "main": "index.js",
-  "type": "commonjs",
+  "type": "module",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js",
-    "pm2": "pm2 start ecosystem.config.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js"
   },
-  "keywords": [
-    "whatsapp",
-    "bot",
-    "easyorder",
-    "autoservice",
-    "webhook"
-  ],
-  "author": "Auto Service",
-  "license": "ISC",
   "dependencies": {
-    "@whiskeysockets/baileys": "^6.7.18",
+    "@whiskeysockets/baileys": "^6.7.9",
     "express": "^4.18.2",
     "body-parser": "^1.20.2",
-    "qrcode": "^1.5.3",
-    "qrcode-terminal": "^0.12.0",
-    "axios": "^1.6.8"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.3",
-    "pm2": "^5.3.0"
-  },
-  "engines": {
-    "node": ">=20.0.0",
-    "npm": ">=9.0.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/your-repo/whatsapp-bot"
+    "qrcode-terminal": "^0.12.0"
   }
 }
