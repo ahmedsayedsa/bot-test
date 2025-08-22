@@ -1,117 +1,93 @@
-import makeWASocket, { useMultiFileAuthState, fetchLatestBaileysVersion } from "@whiskeysockets/baileys";
-import express from "express";
-import bodyParser from "body-parser";
-import fs from "fs";
-import qrcode from "qrcode-terminal";
+const express = require('express');
+const { Boom } = require('@hapi/boom');
+const makeWASocket = require('@whiskeysockets/baileys').default;
+const { useMultiFileAuthState } = require('@whiskeysockets/baileys');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
-app.use(bodyParser.json());
+app.use(express.json());
 
-function loadDB() {
-  if (!fs.existsSync("database.json")) {
-    fs.writeFileSync("database.json", JSON.stringify({ clients: {}, orders: [] }, null, 2));
-  }
-  return JSON.parse(fs.readFileSync("database.json"));
-}
+// قاعدة بيانات بسيطة
+const dbFile = path.join(__dirname, 'db.json');
+if (!fs.existsSync(dbFile)) fs.writeFileSync(dbFile, JSON.stringify({ users: [] }, null, 2));
+const loadDB = () => JSON.parse(fs.readFileSync(dbFile));
+const saveDB = (data) => fs.writeFileSync(dbFile, JSON.stringify(data, null, 2));
 
-function saveDB(db) {
-  fs.writeFileSync("database.json", JSON.stringify(db, null, 2));
-}
+let sock;
 
-function isClientActive(clientId) {
-  const db = loadDB();
-  const client = db.clients[clientId];
-  if (!client) return false;
-  return new Date(client.expiry) > new Date();
-}
+// بدء الاتصال بواتساب
+async function connectToWhatsApp() {
+  const { state, saveCreds } = await useMultiFileAuthState('auth_info');
+  sock = makeWASocket({ auth: state });
 
-function saveOrder(clientId, order) {
-  const db = loadDB();
-  db.orders.push({ clientId, ...order, date: new Date().toISOString() });
-  saveDB(db);
-}
+  sock.ev.on('creds.update', saveCreds);
 
-async function startBot() {
-  const { state, saveCreds } = await useMultiFileAuthState("auth");
-  const { version } = await fetchLatestBaileysVersion();
-  
-  const sock = makeWASocket({
-    version,
-    auth: state,
-    printQRInTerminal: true
+  sock.ev.on('connection.update', (update) => {
+    const { connection, lastDisconnect } = update;
+    if (connection === 'close') {
+      const shouldReconnect = (lastDisconnect.error = Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
+      if (shouldReconnect) connectToWhatsApp();
+    } else if (connection === 'open') {
+      console.log('✅ Connected to WhatsApp');
+    }
   });
-
-  sock.ev.on("creds.update", saveCreds);
-
-  return sock;
 }
 
-const sockPromise = startBot();
+// API لإرسال رسالة للعميل
+app.post('/send', async (req, res) => {
+  const { phone, name, orderId, product, total, address } = req.body;
 
-app.get("/settings/:clientId", (req, res) => {
   const db = loadDB();
-  const client = db.clients[req.params.clientId] || {};
+  let user = db.users.find((u) => u.phone === phone);
+  if (!user) {
+    user = { phone, customMessage: null };
+    db.users.push(user);
+    saveDB(db);
+  }
+
+  const message =
+    user.customMessage ||
+    `🌟 أهلاً وسهلاً ${name}
+
+شكرًا لاختيارك اوتو سيرفس! تم استلام طلبك بنجاح 🎉
+
+🆔 رقم الطلب: #${orderId}
+🛍️ تفاصيل الطلب: ${product}
+💰 الإجمالي: ${total}
+📍 عنوان التوصيل: ${address}
+
+⚠️ ملاحظة مهمة: المعاينة غير متاحة وقت الاستلام
+🔄 يُرجى تأكيد طلبك للبدء في التحضير والشحن`;
+
+  await sock.sendMessage(`${phone}@s.whatsapp.net`, { text: message });
+  res.json({ status: '✅ sent', to: phone });
+});
+
+// صفحة إدارة لتغيير الرسالة
+app.get('/admin/:phone', (req, res) => {
+  const phone = req.params.phone;
+  const db = loadDB();
+  const user = db.users.find((u) => u.phone === phone);
   res.send(`
-    <h2>إعدادات العميل: ${req.params.clientId}</h2>
-    <form method="POST" action="/settings/${req.params.clientId}">
-      <label>الرسالة:</label><br>
-      <textarea name="message" rows="6" cols="40">${client.message || ""}</textarea><br>
-      <label>مدة الاشتراك (أيام):</label>
-      <input type="number" name="days" value="30"><br>
-      <button type="submit">💾 حفظ</button>
+    <h1>إدارة الرسالة - ${phone}</h1>
+    <form method="post" action="/admin/${phone}">
+      <textarea name="msg" rows="10" cols="40">${user?.customMessage || ''}</textarea><br/>
+      <button type="submit">حفظ</button>
     </form>
   `);
 });
 
-app.post("/settings/:clientId", (req, res) => {
+app.post('/admin/:phone', express.urlencoded({ extended: true }), (req, res) => {
+  const phone = req.params.phone;
   const db = loadDB();
-  const clientId = req.params.clientId;
-  const { message, days } = req.body;
-  const expiry = new Date();
-  expiry.setDate(expiry.getDate() + parseInt(days));
-  db.clients[clientId] = { message, expiry: expiry.toISOString() };
-  saveDB(db);
-  res.send("✅ تم حفظ البيانات وتحديث الاشتراك");
-});
-
-app.get("/export/:clientId", (req, res) => {
-  const db = loadDB();
-  const orders = db.orders.filter(o => o.clientId === req.params.clientId);
-  let csv = "Name,Phone,Product,Total,Address,Date\n";
-  orders.forEach(o => {
-    csv += `${o.name},${o.phone},${o.product},${o.total},${o.address},${o.date}\n`;
-  });
-  res.setHeader("Content-disposition", "attachment; filename=orders.csv");
-  res.set("Content-Type", "text/csv");
-  res.send(csv);
-});
-
-app.post("/webhook/:clientId", async (req, res) => {
-  const clientId = req.params.clientId;
-  const order = req.body;
-
-  if (!isClientActive(clientId)) {
-    return res.status(403).send("❌ الاشتراك غير مفعل");
+  const user = db.users.find((u) => u.phone === phone);
+  if (user) {
+    user.customMessage = req.body.msg;
+    saveDB(db);
   }
-
-  const db = loadDB();
-  const template = db.clients[clientId]?.message || "شكراً {name} على طلبك!";
-  const finalMessage = template
-    .replace("{name}", order.name || "")
-    .replace("{product}", order.product || "")
-    .replace("{total}", order.total || "")
-    .replace("{orderId}", order.id || "");
-
-  try {
-    const sock = await sockPromise;
-    await sock.sendMessage(order.phone + "@s.whatsapp.net", { text: finalMessage });
-    saveOrder(clientId, order);
-    res.send("✅ تم إرسال الرسالة");
-  } catch (err) {
-    console.error("❌ خطأ في إرسال الرسالة:", err);
-    res.status(500).send("❌ خطأ في إرسال الرسالة");
-  }
+  res.redirect(`/admin/${phone}`);
 });
 
-const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+app.listen(3000, () => console.log('🚀 Server running on port 3000'));
+connectToWhatsApp();
