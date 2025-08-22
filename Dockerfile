@@ -1,21 +1,20 @@
-# استخدم Node.js
+# Use Node.js LTS
 FROM node:18
 
-# تعيين مجلد العمل
+# Set working directory
 WORKDIR /usr/src/app
 
-# نسخ ملفات package.json أولاً لتثبيت الحزم
+# Copy package files
 COPY package*.json ./
 
-# تثبيت الحزم
-RUN npm install
+# Install dependencies
+RUN npm install --production
 
-# نسخ باقي الملفات
+# Copy the rest of the code INCLUDING views/
 COPY . .
 
-# فضح البورت (من ENV أو 3000 افتراضي)
-ENV PORT=3000
+# Expose the port
 EXPOSE 3000
 
-# تشغيل السيرفر
-CMD [ "node", "index.js" ]
+# Start app
+CMD ["node", "index.js"]
