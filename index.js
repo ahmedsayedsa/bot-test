@@ -139,6 +139,12 @@ app.get("/admin", (req, res) => {
         <p>لبدء جلسة جديدة، قم بإرسال طلب إلى الـ webhook.</p>
     `);
 });
+app.use('/admin', adminRoutes);
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`✅ Server running on port ${PORT}`);
+});
 
 // صفحة إدارة كل عميل على حدة
 app.get('/admin/client/:sessionId', (req, res) => {
