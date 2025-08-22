@@ -1,0 +1,9 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head><meta charset="UTF-8"><title>لوحة العميل</title></head>
+<body>
+  <h1>مرحبا، <%= client.name %></h1>
+  <p>رسالتك المخصصة:</p>
+  <div><%= client.customMessage || 'لم تقم بتعيين رسالة بعد.' %></div>
+</body>
+</html>

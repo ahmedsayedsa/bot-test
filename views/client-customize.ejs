@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head><meta charset="UTF-8"><title>تعديل الرسالة</title></head>
+<body>
+  <h1>العميل: <%= client.name %></h1>
+  <form method="POST">
+    <textarea name="message" rows="5"><%= client.customMessage || '' %></textarea>
+    <button type="submit">حفظ</button>
+  </form>
+</body>
+</html>
