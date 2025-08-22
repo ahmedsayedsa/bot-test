@@ -25,6 +25,32 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
+const PORT = process.env.PORT || 3000;
+
+// عشان نحدد مكان الملفات
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// نخلي Express يخدم الملفات الثابتة من public
+app.use(express.static(path.join(__dirname, "public")));
+
+// صفحة الأدمن
+app.get("/admin", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "admin.html"));
+});
+
+// صفحة اليوزر
+app.get("/user/:id", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "user.html"));
+});
+
+// باقي الـ API هنا...
+
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+});
+
+
 // نخلي السيرفر يعرف يدي ملفات HTML
 app.use(express.static(path.join(__dirname, "views")));
 
