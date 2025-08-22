@@ -1,57 +1,35 @@
-const express = require("express");
-const path = require("path");
-const { fileURLToPath } = require("url");
-const bodyParser = require("body-parser");
+const express = require('express');
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// استخدام dirname بدلاً من __dirname في ES modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Middlewares
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
-
-// تقديم الملفات الثابتة من مجلد public
-app.use(express.static(path.join(__dirname, "public")));
-
-// الصفحة الرئيسية
+// Test route أول
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, "public", "index.html"));
+    res.send('<h1>السيرفر شغال!</h1><a href="/admin">Admin</a> | <a href="/user">User</a>');
 });
 
-// صفحة الادمن
+// Admin route
 app.get('/admin', (req, res) => {
-    res.sendFile(path.join(__dirname, "public", "admin.html"));
+    console.log('Admin route accessed');
+    res.send('<h1>صفحة الادمن</h1><p>الروت شغال!</p>');
 });
 
-// صفحة اليوزر
+// User route  
 app.get('/user', (req, res) => {
-    res.sendFile(path.join(__dirname, "public", "user.html"));
+    console.log('User route accessed');
+    res.send('<h1>صفحة اليوزر</h1><p>الروت شغال!</p>');
 });
 
-// API لإنشاء يوزر جديد
-app.post("/api/create-user", (req, res) => {
-    const { username, phone, days } = req.body;
-    console.log("تم إنشاء يوزر جديد:", { username, phone, days });
-    res.json({ success: true, message: "تم إنشاء المدير بنجاح!" });
+// Static files (بعد الروتس)
+app.use(express.static(path.join(__dirname, 'public')));
+
+// 404 handler
+app.use('*', (req, res) => {
+    res.status(404).send(`<h1>404 - الصفحة غير موجودة</h1><p>الرابط المطلوب: ${req.originalUrl}</p>`);
 });
 
-// API لتحديث رسالة المدير
-app.post("/api/update-message", (req, res) => {
-    const { message } = req.body;
-    console.log("تم تحديث الرسالة:", message);
-    res.json({ success: true, message: "تم تحديث الرسالة بنجاح!" });
-});
-
-// Catch all للروتس غير الموجودة
-app.get('*', (req, res) => {
-    res.status(404).send('الصفحة غير موجودة');
-});
-
-// تشغيل السيرفر
-app.listen(PORT, "0.0.0.0", () => {
-    console.log(`🚀 Server running on port ${PORT}`);
+app.listen(PORT, () => {
+    console.log(`🚀 Server running on http://localhost:${PORT}`);
+    console.log(`📁 Static files from: ${path.join(__dirname, 'public')}`);
 });
