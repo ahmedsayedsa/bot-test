@@ -174,3 +174,17 @@ app.get('/user', (req, res) => {
     console.log('👤 تم الوصول لصفحة اليوزر');
     res.sendFile(path.join(__dirname, 'public', 'user.html'));
 });
+# نسخ ملف index.js إلى ملف جديد
+cp index.js index_backup.js
+
+# تغيير البورت من 3000 إلى 8080
+sed -i 's/3000/8080/g' index.js
+
+# إضافة الروتس إذا لم تكن موجودة
+if ! grep -q "app.get.*admin" index.js; then
+    # إضافة الروتس قبل آخر سطر
+    sed -i '/^});$/i\\n// Web Routes\napp.use(express.static(path.join(__dirname, "public")));\n\napp.get("/", (req, res) => {\n    res.sendFile(path.join(__dirname, "public", "index.html"));\n});\n\napp.get("/admin", (req, res) => {\n    console.log("📊 Admin page accessed");\n    res.sendFile(path.join(__dirname, "public", "admin.html"));\n});\n\napp.get("/user", (req, res) => {\n    console.log("👤 User page accessed");\n    res.sendFile(path.join(__dirname, "public", "user.html"));\n});\n' index.js
+fi
+
+echo "✅ تم تغيير البورت إلى 8080 وإضافة الروتس"
+echo "🚀 شغل البوت بالأمر: node index.js"
