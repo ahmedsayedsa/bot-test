@@ -9,11 +9,13 @@ require('dotenv').config();
 const { default: makeWASocket, DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const sqlite3 = require('sqlite3').verbose();
 
+// --- إعداد المجلدات ---
 const AUTH_DIR = path.join(__dirname, 'auth_info');
 const DATA_DIR = path.join(__dirname, 'data');
 if (!fs.existsSync(AUTH_DIR)) fs.mkdirSync(AUTH_DIR);
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 
+// --- إعداد قاعدة البيانات ---
 const DB_PATH = path.join(DATA_DIR, 'orders.db');
 const db = new sqlite3.Database(DB_PATH);
 db.serialize(() => {
@@ -28,6 +30,7 @@ db.serialize(() => {
   )`);
 });
 
+// --- إعداد اتصال واتساب ---
 let sock = null;
 async function startWhatsApp() {
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
@@ -60,43 +63,36 @@ async function startWhatsApp() {
 
 startWhatsApp().catch(err => console.error('start error', err));
 
+// --- إعداد خادم Express ---
 const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-// Debug: Check public directory and files
-console.log('Setting up routes...');
-console.log('Public directory:', path.join(__dirname, 'public'));
-console.log('Admin file exists:', fs.existsSync(path.join(__dirname, 'public', 'admin.html')));
-console.log('User file exists:', fs.existsSync(path.join(__dirname, 'public', 'user.html')));
+// =====================================================
+// (التعديل هنا) تم نقل المسارات المخصصة قبل express.static
+// =====================================================
 
-app.use(express.static(path.join(__dirname, 'public')));
-
+// مسار للتحقق من حالة الاتصال
 app.get('/', (req,res)=>res.json({status:"ok", connected: !!sock}));
 
-// Routes for HTML pages - with debug logging
+// مسارات لصفحات HTML
 app.get('/admin', (req, res) => {
   console.log('Admin route called');
-  const filePath = path.join(__dirname, 'public', 'admin.html');
-  console.log('Sending file:', filePath);
-  console.log('File exists:', fs.existsSync(filePath));
-  res.sendFile(filePath);
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
 app.get('/user', (req, res) => {
   console.log('User route called');
-  const filePath = path.join(__dirname, 'public', 'user.html');
-  console.log('Sending file:', filePath);
-  console.log('File exists:', fs.existsSync(filePath));
-  res.sendFile(filePath);
+  res.sendFile(path.join(__dirname, 'public', 'user.html'));
 });
 
-// Test route for debugging
+// مسار تجريبي للتأكد من عمل المسارات
 app.get('/test-admin', (req, res) => {
   console.log('Test admin route called');
   res.send('Test admin route works!');
 });
 
+// مسار Webhook لاستقبال الطلبات
 app.post('/webhook', async (req,res)=>{
   try {
     const order = req.body;
@@ -147,6 +143,7 @@ app.post('/webhook', async (req,res)=>{
   }
 });
 
+// مسار لجلب الطلبات في صفحة الأدمن
 app.get('/admin/orders', (req,res)=>{
   db.all("SELECT * FROM orders ORDER BY created_at DESC LIMIT 200", (err, rows) => {
     if (err) return res.status(500).json({error: ''+err});
@@ -154,6 +151,7 @@ app.get('/admin/orders', (req,res)=>{
   });
 });
 
+// مسار لحفظ قوالب الرسائل
 app.post('/admin/template/:phone', (req,res)=>{
   const phone = req.params.phone.replace(/\\D/g,'');
   const dir = path.join(DATA_DIR,'templates');
@@ -162,5 +160,13 @@ app.post('/admin/template/:phone', (req,res)=>{
   res.json({ok:true});
 });
 
+// =====================================================
+// (التعديل هنا) express.static يأتي بعد تعريف المسارات المخصصة
+// =====================================================
+// هذا السطر يخدم الملفات الثابتة (مثل index.html, style.css) من مجلد public
+app.use(express.static(path.join(__dirname, 'public')));
+
+
+// --- تشغيل الخادم ---
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, '0.0.0.0', ()=>console.log('🚀 Webhook server running on port', PORT));
