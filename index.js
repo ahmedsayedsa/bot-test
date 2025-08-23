@@ -188,3 +188,19 @@ fi
 
 echo "✅ تم تغيير البورت إلى 8080 وإضافة الروتس"
 echo "🚀 شغل البوت بالأمر: node index.js"
+// Web Routes - أضف هذا الكود قبل آخر سطر
+app.use(express.static(path.join(__dirname, "public")));
+
+app.get("/", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+app.get("/admin", (req, res) => {
+    console.log("📊 تم الوصول لصفحة الادمن");
+    res.sendFile(path.join(__dirname, "public", "admin.html"));
+});
+
+app.get("/user", (req, res) => {
+    console.log("👤 تم الوصول لصفحة اليوزر");
+    res.sendFile(path.join(__dirname, "public", "user.html"));
+});
