@@ -63,17 +63,38 @@ startWhatsApp().catch(err => console.error('start error', err));
 const app = express();
 app.use(cors());
 app.use(bodyParser.json());
+
+// Debug: Check public directory and files
+console.log('Setting up routes...');
+console.log('Public directory:', path.join(__dirname, 'public'));
+console.log('Admin file exists:', fs.existsSync(path.join(__dirname, 'public', 'admin.html')));
+console.log('User file exists:', fs.existsSync(path.join(__dirname, 'public', 'user.html')));
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req,res)=>res.json({status:"ok", connected: !!sock}));
 
-// Routes for HTML pages
+// Routes for HTML pages - with debug logging
 app.get('/admin', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+  console.log('Admin route called');
+  const filePath = path.join(__dirname, 'public', 'admin.html');
+  console.log('Sending file:', filePath);
+  console.log('File exists:', fs.existsSync(filePath));
+  res.sendFile(filePath);
 });
 
 app.get('/user', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'user.html'));
+  console.log('User route called');
+  const filePath = path.join(__dirname, 'public', 'user.html');
+  console.log('Sending file:', filePath);
+  console.log('File exists:', fs.existsSync(filePath));
+  res.sendFile(filePath);
+});
+
+// Test route for debugging
+app.get('/test-admin', (req, res) => {
+  console.log('Test admin route called');
+  res.send('Test admin route works!');
 });
 
 app.post('/webhook', async (req,res)=>{
@@ -142,4 +163,4 @@ app.post('/admin/template/:phone', (req,res)=>{
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, ()=>console.log('🚀 Webhook server running on port', PORT));
+app.listen(PORT, '0.0.0.0', ()=>console.log('🚀 Webhook server running on port', PORT));
