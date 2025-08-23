@@ -129,3 +129,48 @@ app.post("/webhook", (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 السيرفر شغال على http://localhost:${PORT}`);
 });
+import express from "express";
+import bodyParser from "body-parser";
+
+const app = express();
+app.use(bodyParser.json());
+
+// test route
+app.get("/", (req, res) => {
+  res.send("✅ WhatsApp Bot is running");
+});
+
+// admin page
+app.get("/admin", (req, res) => {
+  res.send("<h1>Admin Panel</h1>");
+});
+
+// user page
+app.get("/user/:id", (req, res) => {
+  res.send(`<h1>User Page for ${req.params.id}</h1>`);
+});
+
+// Cloud Run requires listening on PORT env
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 Server is running on port ${PORT}`);
+});
+// إعداد الملفات الثابتة
+app.use(express.static(path.join(__dirname, 'public')));
+
+// الصفحة الرئيسية
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// صفحة الادمن
+app.get('/admin', (req, res) => {
+    console.log('📊 تم الوصول لصفحة الادمن');
+    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
+// صفحة اليوزر  
+app.get('/user', (req, res) => {
+    console.log('👤 تم الوصول لصفحة اليوزر');
+    res.sendFile(path.join(__dirname, 'public', 'user.html'));
+});
