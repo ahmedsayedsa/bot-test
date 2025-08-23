@@ -1,0 +1,14 @@
+# This file specifies files that are *not* uploaded to Google Cloud.
+# See https://cloud.google.com/sdk/gcloud/reference/topic/gcloudignore for more details.
+
+# Node.js dependencies
+node_modules/
+
+# Authentication and data files that should not be in the repository
+auth_info/
+data/orders.db
+
+# IDE and OS files
+.vscode/
+.DS_Store
+*.log
