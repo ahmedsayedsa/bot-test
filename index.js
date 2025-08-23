@@ -1,106 +1,127 @@
 import express from "express";
-import makeWASocket, { useMultiFileAuthState } from "@adiwajshing/baileys";
-import { Boom } from "@hapi/boom";
-import { Storage } from "@google-cloud/storage";
+import bodyParser from "body-parser";
 import fs from "fs";
 import path from "path";
 
-// إعداد Google Cloud Storage
-const storage = new Storage();
-const bucketName = process.env.SESSION_BUCKET || "whatsapp-sessions-bucket";
-const sessionFile = "session.json";
-
-// تحميل/حفظ الجلسة من/إلى GCS
-async function loadSession() {
-  try {
-    const file = storage.bucket(bucketName).file(sessionFile);
-    const [exists] = await file.exists();
-    if (!exists) return null;
-    const [contents] = await file.download();
-    return JSON.parse(contents.toString());
-  } catch (err) {
-    console.error("❌ Failed to load session:", err);
-    return null;
-  }
-}
-
-async function saveSession(data) {
-  try {
-    const file = storage.bucket(bucketName).file(sessionFile);
-    await file.save(JSON.stringify(data));
-    console.log("✅ Session saved to GCS");
-  } catch (err) {
-    console.error("❌ Failed to save session:", err);
-  }
-}
-
 const app = express();
-app.use(express.json());
+const PORT = process.env.PORT || 3000;
 
-let sock;
+// middlewares
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
-async function startBot() {
-  console.log("🚀 Starting WhatsApp bot...");
+// مكان تخزين البيانات (مؤقت)
+const dataFile = path.join("./users.json");
 
-  const sessionData = await loadSession();
-  const { state, saveCreds } = await useMultiFileAuthState("auth");
-
-  if (sessionData) {
-    fs.writeFileSync(
-      path.join("auth", "creds.json"),
-      JSON.stringify(sessionData, null, 2)
-    );
-  }
-
-  sock = makeWASocket({
-    printQRInTerminal: true,
-    auth: state,
-  });
-
-  sock.ev.on("creds.update", async (creds) => {
-    await saveCreds();
-    await saveSession(creds);
-  });
-
-  sock.ev.on("connection.update", (update) => {
-    const { connection, lastDisconnect, qr } = update;
-    if (qr) console.log("📌 Scan this QR:", qr);
-
-    if (connection === "close") {
-      const reason = new Boom(lastDisconnect?.error)?.output.statusCode;
-      console.log("❌ Connection closed. Reason:", reason);
-      startBot();
-    } else if (connection === "open") {
-      console.log("✅ Bot connected to WhatsApp!");
-    }
-  });
+// helper functions
+function loadUsers() {
+  if (!fs.existsSync(dataFile)) return {};
+  return JSON.parse(fs.readFileSync(dataFile, "utf-8"));
 }
 
-// API test endpoint
-app.get("/", (req, res) => {
-  res.json({
-    status: "✅ Bot running",
-    connected: !!sock,
-  });
+function saveUsers(users) {
+  fs.writeFileSync(dataFile, JSON.stringify(users, null, 2));
+}
+
+// ✅ صفحة الأدمن
+app.get("/admin", (req, res) => {
+  res.send(`
+    <h1>لوحة التحكم - الأدمن</h1>
+    <form method="POST" action="/create-user">
+      <input type="text" name="username" placeholder="اسم العميل" required />
+      <input type="text" name="userId" placeholder="ID العميل (مثال: user1)" required />
+      <input type="number" name="days" placeholder="مدة الاشتراك (بالأيام)" required />
+      <button type="submit">إنشاء اشتراك</button>
+    </form>
+  `);
 });
 
-// Webhook لاستقبال الأوردرات من EasyOrder
-app.post("/webhook", async (req, res) => {
-  try {
-    const { number, message } = req.body;
-    if (!sock) {
-      return res.status(500).json({ error: "❌ Bot not connected" });
-    }
-    await sock.sendMessage(number + "@s.whatsapp.net", { text: message });
-    res.json({ success: true });
-  } catch (err) {
-    console.error("❌ Webhook error:", err);
-    res.status(500).json({ error: "Webhook failed" });
+// ✅ إنشاء عميل جديد
+app.post("/create-user", (req, res) => {
+  const { username, userId, days } = req.body;
+  const users = loadUsers();
+
+  const expiry = Date.now() + days * 24 * 60 * 60 * 1000;
+
+  users[userId] = {
+    username,
+    expiry,
+    message:
+      "🌟 أهلاً {{name}}\nشكراً لاختيارك اوتو سيرفس! طلبك رقم {{order_id}} - المنتج: {{product}}",
+  };
+
+  saveUsers(users);
+  res.send(`<p>تم إنشاء المستخدم ${username} بنجاح. <a href="/admin">رجوع</a></p>`);
+});
+
+// ✅ صفحة العميل لتخصيص الرسالة
+app.get("/user/:id", (req, res) => {
+  const userId = req.params.id;
+  const users = loadUsers();
+
+  if (!users[userId]) {
+    return res.status(404).send("⚠️ المستخدم غير موجود");
   }
+
+  res.send(`
+    <h1>إعداد الرسائل للعميل ${users[userId].username}</h1>
+    <form method="POST" action="/save-message/${userId}">
+      <textarea name="message" rows="8" cols="50">${users[userId].message}</textarea>
+      <br/>
+      <button type="submit">حفظ</button>
+    </form>
+    <p>استخدم المتغيرات التالية داخل الرسالة:</p>
+    <ul>
+      <li><b>{{name}}</b> → اسم العميل</li>
+      <li><b>{{order_id}}</b> → رقم الطلب</li>
+      <li><b>{{product}}</b> → المنتج</li>
+    </ul>
+  `);
 });
 
-const PORT = process.env.PORT || 3000;
+// ✅ حفظ رسالة العميل
+app.post("/save-message/:id", (req, res) => {
+  const userId = req.params.id;
+  const users = loadUsers();
+
+  if (!users[userId]) {
+    return res.status(404).send("⚠️ المستخدم غير موجود");
+  }
+
+  users[userId].message = req.body.message;
+  saveUsers(users);
+
+  res.send(`<p>✅ تم تحديث الرسالة للعميل ${users[userId].username}</p><a href="/user/${userId}">رجوع</a>`);
+});
+
+// ✅ Webhook بيستقبل الأوردر من Easy Order
+app.post("/webhook", (req, res) => {
+  const { userId, order } = req.body; // لازم Easy Order يبعت userId كمان
+  const users = loadUsers();
+
+  if (!users[userId]) {
+    return res.status(404).send({ error: "المستخدم غير موجود" });
+  }
+
+  // تحقق من صلاحية الاشتراك
+  if (Date.now() > users[userId].expiry) {
+    return res.status(403).send({ error: "الاشتراك منتهي" });
+  }
+
+  let msg = users[userId].message;
+  msg = msg.replace("{{name}}", order.name || "العميل");
+  msg = msg.replace("{{order_id}}", order.id || "#0000");
+  msg = msg.replace("{{product}}", order.product || "منتج");
+
+  console.log("🚀 رسالة للعميل:", msg);
+
+  // هنا تدمج مع واتساب
+  // sendWhatsAppMessage(order.phone, msg);
+
+  res.send({ status: "ok", message: msg });
+});
+
+// ✅ تشغيل السيرفر
 app.listen(PORT, () => {
-  console.log(`🌍 Server running on http://0.0.0.0:${PORT}`);
-  startBot();
+  console.log(`🚀 السيرفر شغال على http://localhost:${PORT}`);
 });
