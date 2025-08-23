@@ -1,206 +1,145 @@
-import express from "express";
-import bodyParser from "body-parser";
-import fs from "fs";
-import path from "path";
+const fs = require('fs');
+const path = require('path');
+const express = require('express');
+const bodyParser = require('body-parser');
+const cors = require('cors');
+const qrcode = require('qrcode-terminal');
+require('dotenv').config();
 
-const app = express();
-const PORT = process.env.PORT || 8080;
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+const { default: makeWASocket, DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
+const sqlite3 = require('sqlite3').verbose();
+
+const AUTH_DIR = path.join(__dirname, 'auth_info');
+const DATA_DIR = path.join(__dirname, 'data');
+if (!fs.existsSync(AUTH_DIR)) fs.mkdirSync(AUTH_DIR);
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
+
+const DB_PATH = path.join(DATA_DIR, 'orders.db');
+const db = new sqlite3.Database(DB_PATH);
+db.serialize(() => {
+  db.run(`CREATE TABLE IF NOT EXISTS orders (
+    id TEXT PRIMARY KEY,
+    name TEXT,
+    phone TEXT,
+    address TEXT,
+    total TEXT,
+    product TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
 });
 
+let sock = null;
+async function startWhatsApp() {
+  const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+  const { version } = await fetchLatestBaileysVersion().catch(()=>({version:[2,2204,13]}));
+  console.log('Baileys version to connect:', version);
 
-// middlewares
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+  sock = makeWASocket({
+    version,
+    printQRInTerminal: false,
+    auth: state,
+  });
 
-// مكان تخزين البيانات (مؤقت)
-const dataFile = path.join("./users.json");
+  sock.ev.on('creds.update', saveCreds);
 
-// helper functions
-function loadUsers() {
-  if (!fs.existsSync(dataFile)) return {};
-  return JSON.parse(fs.readFileSync(dataFile, "utf-8"));
+  sock.ev.on('connection.update', (update) => {
+    const { connection, lastDisconnect, qr } = update;
+    if (qr) {
+      console.log("📌 QR code received. Scan it with WhatsApp to login.");
+      qrcode.generate(qr, { small: true });
+    }
+    if (connection === 'open') {
+      console.log('✅ WhatsApp connection opened');
+    }
+    if (connection === 'close') {
+      console.log('connection closed, restarting in 5s', lastDisconnect ? lastDisconnect.error : '');
+      setTimeout(()=>startWhatsApp(), 5000);
+    }
+  });
 }
 
-function saveUsers(users) {
-  fs.writeFileSync(dataFile, JSON.stringify(users, null, 2));
-}
-
-// ✅ صفحة الأدمن
-app.get("/admin", (req, res) => {
-  res.send(`
-    <h1>لوحة التحكم - الأدمن</h1>
-    <form method="POST" action="/create-user">
-      <input type="text" name="username" placeholder="اسم العميل" required />
-      <input type="text" name="userId" placeholder="ID العميل (مثال: user1)" required />
-      <input type="number" name="days" placeholder="مدة الاشتراك (بالأيام)" required />
-      <button type="submit">إنشاء اشتراك</button>
-    </form>
-  `);
-});
-
-// ✅ إنشاء عميل جديد
-app.post("/create-user", (req, res) => {
-  const { username, userId, days } = req.body;
-  const users = loadUsers();
-
-  const expiry = Date.now() + days * 24 * 60 * 60 * 1000;
-
-  users[userId] = {
-    username,
-    expiry,
-    message:
-      "🌟 أهلاً {{name}}\nشكراً لاختيارك اوتو سيرفس! طلبك رقم {{order_id}} - المنتج: {{product}}",
-  };
-
-  saveUsers(users);
-  res.send(`<p>تم إنشاء المستخدم ${username} بنجاح. <a href="/admin">رجوع</a></p>`);
-});
-
-// ✅ صفحة العميل لتخصيص الرسالة
-app.get("/user/:id", (req, res) => {
-  const userId = req.params.id;
-  const users = loadUsers();
-
-  if (!users[userId]) {
-    return res.status(404).send("⚠️ المستخدم غير موجود");
-  }
-
-  res.send(`
-    <h1>إعداد الرسائل للعميل ${users[userId].username}</h1>
-    <form method="POST" action="/save-message/${userId}">
-      <textarea name="message" rows="8" cols="50">${users[userId].message}</textarea>
-      <br/>
-      <button type="submit">حفظ</button>
-    </form>
-    <p>استخدم المتغيرات التالية داخل الرسالة:</p>
-    <ul>
-      <li><b>{{name}}</b> → اسم العميل</li>
-      <li><b>{{order_id}}</b> → رقم الطلب</li>
-      <li><b>{{product}}</b> → المنتج</li>
-    </ul>
-  `);
-});
-
-// ✅ حفظ رسالة العميل
-app.post("/save-message/:id", (req, res) => {
-  const userId = req.params.id;
-  const users = loadUsers();
-
-  if (!users[userId]) {
-    return res.status(404).send("⚠️ المستخدم غير موجود");
-  }
-
-  users[userId].message = req.body.message;
-  saveUsers(users);
-
-  res.send(`<p>✅ تم تحديث الرسالة للعميل ${users[userId].username}</p><a href="/user/${userId}">رجوع</a>`);
-});
-
-// ✅ Webhook بيستقبل الأوردر من Easy Order
-app.post("/webhook", (req, res) => {
-  const { userId, order } = req.body; // لازم Easy Order يبعت userId كمان
-  const users = loadUsers();
-
-  if (!users[userId]) {
-    return res.status(404).send({ error: "المستخدم غير موجود" });
-  }
-
-  // تحقق من صلاحية الاشتراك
-  if (Date.now() > users[userId].expiry) {
-    return res.status(403).send({ error: "الاشتراك منتهي" });
-  }
-
-  let msg = users[userId].message;
-  msg = msg.replace("{{name}}", order.name || "العميل");
-  msg = msg.replace("{{order_id}}", order.id || "#0000");
-  msg = msg.replace("{{product}}", order.product || "منتج");
-
-  console.log("🚀 رسالة للعميل:", msg);
-
-  // هنا تدمج مع واتساب
-  // sendWhatsAppMessage(order.phone, msg);
-
-  res.send({ status: "ok", message: msg });
-});
-
-// ✅ تشغيل السيرفر
-app.listen(PORT, () => {
-  console.log(`🚀 السيرفر شغال على http://localhost:${PORT}`);
-});
-import express from "express";
-import bodyParser from "body-parser";
+startWhatsApp().catch(err => console.error('start error', err));
 
 const app = express();
+app.use(cors());
 app.use(bodyParser.json());
-
-// test route
-app.get("/", (req, res) => {
-  res.send("✅ WhatsApp Bot is running");
-});
-
-// admin page
-app.get("/admin", (req, res) => {
-  res.send("<h1>Admin Panel</h1>");
-});
-
-// user page
-app.get("/user/:id", (req, res) => {
-  res.send(`<h1>User Page for ${req.params.id}</h1>`);
-});
-
-// Cloud Run requires listening on PORT env
-const PORT = process.env.PORT || 8080;
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 Server is running on port ${PORT}`);
-});
-// إعداد الملفات الثابتة
 app.use(express.static(path.join(__dirname, 'public')));
 
-// الصفحة الرئيسية
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+app.get('/', (req,res)=>res.json({status:"ok", connected: !!sock}));
 
-// صفحة الادمن
+// Routes for HTML pages
 app.get('/admin', (req, res) => {
-    console.log('📊 تم الوصول لصفحة الادمن');
-    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
-// صفحة اليوزر  
 app.get('/user', (req, res) => {
-    console.log('👤 تم الوصول لصفحة اليوزر');
-    res.sendFile(path.join(__dirname, 'public', 'user.html'));
-});
-# نسخ ملف index.js إلى ملف جديد
-cp index.js index_backup.js
-
-# تغيير البورت من 3000 إلى 8080
-sed -i 's/3000/8080/g' index.js
-
-# إضافة الروتس إذا لم تكن موجودة
-if ! grep -q "app.get.*admin" index.js; then
-    # إضافة الروتس قبل آخر سطر
-    sed -i '/^});$/i\\n// Web Routes\napp.use(express.static(path.join(__dirname, "public")));\n\napp.get("/", (req, res) => {\n    res.sendFile(path.join(__dirname, "public", "index.html"));\n});\n\napp.get("/admin", (req, res) => {\n    console.log("📊 Admin page accessed");\n    res.sendFile(path.join(__dirname, "public", "admin.html"));\n});\n\napp.get("/user", (req, res) => {\n    console.log("👤 User page accessed");\n    res.sendFile(path.join(__dirname, "public", "user.html"));\n});\n' index.js
-fi
-
-echo "✅ تم تغيير البورت إلى 8080 وإضافة الروتس"
-echo "🚀 شغل البوت بالأمر: node index.js"
-// Web Routes - أضف هذا الكود قبل آخر سطر
-app.use(express.static(path.join(__dirname, "public")));
-
-app.get("/", (req, res) => {
-    res.sendFile(path.join(__dirname, "public", "index.html"));
+  res.sendFile(path.join(__dirname, 'public', 'user.html'));
 });
 
-app.get("/admin", (req, res) => {
-    console.log("📊 تم الوصول لصفحة الادمن");
-    res.sendFile(path.join(__dirname, "public", "admin.html"));
+app.post('/webhook', async (req,res)=>{
+  try {
+    const order = req.body;
+    const id = order.id || ('o_'+Date.now());
+    const name = (order.customer && order.customer.name) ? order.customer.name : (order.name || 'عميل');
+    let phone = (order.customer && order.customer.phone) ? order.customer.phone : (order.phone || '');
+    const address = (order.customer && order.customer.address) ? order.customer.address : (order.address || '');
+    const total = order.total || order.total_price || '';
+    const product = order.product || (order.items && order.items[0] && order.items[0].name) || '';
+
+    phone = phone.replace(/\D/g,'');
+    if (!phone.startsWith('20')) {
+      if (phone.startsWith('0')) phone = '20' + phone.substring(1);
+      else phone = '20' + phone;
+    }
+    const jid = phone + '@s.whatsapp.net';
+
+    db.run(`INSERT OR REPLACE INTO orders (id,name,phone,address,total,product) VALUES (?,?,?,?,?,?)`, [id, name, phone, address, total, product]);
+
+    const tmplPath = path.join(DATA_DIR, 'templates', phone + '.txt');
+    let messageText = `أهلاً أ/ ${name} 👋\n📞 ${phone}\n📍 ${address}\n💰 ${total} جنيه\nرقم الطلب: ${id}\n`;
+    if (fs.existsSync(tmplPath)) {
+      try {
+        let t = fs.readFileSync(tmplPath,'utf-8');
+        messageText = t.replace(/\{name\}/g, name).replace(/\{phone\}/g, phone).replace(/\{address\}/g, address).replace(/\{total\}/g, total).replace(/\{order_id\}/g, id).replace(/\{product\}/g, product);
+      } catch(e){ console.error('template read error', e); }
+    }
+
+    if (!sock) return res.status(500).json({error:"WhatsApp not ready"});
+
+    const buttons = [
+      {buttonId: `confirm_${id}`, buttonText: {displayText: "تأكيد الطلب"}, type: 1},
+      {buttonId: `cancel_${id}`, buttonText: {displayText: "إلغاء الطلب"}, type: 1}
+    ];
+
+    const buttonsMessage = {
+      contentText: messageText,
+      footerText: "جاري التعامل مع طلبك",
+      buttons: buttons,
+      headerType: 1
+    };
+
+    await sock.sendMessage(jid, {buttonsMessage});
+    res.json({status:"sent"});
+  } catch(e) {
+    console.error('webhook error', e);
+    res.status(500).json({error: e.toString()});
+  }
 });
 
-app.get("/user", (req, res) => {
-    console.log("👤 تم الوصول لصفحة اليوزر");
-    res.sendFile(path.join(__dirname, "public", "user.html"));
+app.get('/admin/orders', (req,res)=>{
+  db.all("SELECT * FROM orders ORDER BY created_at DESC LIMIT 200", (err, rows) => {
+    if (err) return res.status(500).json({error: ''+err});
+    res.json(rows);
+  });
 });
+
+app.post('/admin/template/:phone', (req,res)=>{
+  const phone = req.params.phone.replace(/\\D/g,'');
+  const dir = path.join(DATA_DIR,'templates');
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, {recursive:true});
+  fs.writeFileSync(path.join(dir, phone + '.txt'), req.body.template || '');
+  res.json({ok:true});
+});
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, ()=>console.log('🚀 Webhook server running on port', PORT));
