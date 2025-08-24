@@ -187,8 +187,17 @@ app.post('/webhook/easyorder', async (req, res) => {
 
 // --- تشغيل ---
 async function main() {
-    await startWhatsApp();
-    const PORT = process.env.PORT || 3000;
-    app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server running on http://0.0.0.0:${PORT}`));
+    try {
+        await startWhatsApp();
+        const PORT = process.env.PORT || 3000; // <<< هنا خد بالك
+        app.listen(PORT, '0.0.0.0', () => {
+            console.log(`🚀 Server is running on http://0.0.0.0:${PORT}`);
+        });
+    } catch (error) {
+        console.error("Error starting server:", error);
+        process.exit(1);
+    }
 }
+
 main().catch(console.error);
+
