@@ -1,18 +1,34 @@
 {
-  "name": "whatsapp-bot-manager",
+  "name": "whatsapp-bot",
   "version": "1.0.0",
-  "description": "A full system to manage WhatsApp bot subscriptions",
+  "description": "WhatsApp Bot with subscription management using Firestore",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "keywords": [
+    "whatsapp",
+    "bot",
+    "firestore",
+    "subscription",
+    "express"
+  ],
+  "author": "Ahmed",
+  "license": "MIT",
   "dependencies": {
-    "@google-cloud/firestore": "^7.7.0",
-    "@whiskeysockets/baileys": "^6.7.2",
+    "@google-cloud/firestore": "^7.1.0",
+    "@whiskeysockets/baileys": "^6.5.0",
     "body-parser": "^1.20.2",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
-    "express": "^4.18.2",
-    "qrcode-terminal": "^0.12.0"
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=16.0.0"
   }
 }
