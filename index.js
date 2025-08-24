@@ -172,7 +172,17 @@ app.get('/admin', (req, res) => {
 });
 
 app.get('/user', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'user.html'));
+  console.log('🔄 User route accessed');
+  const filePath = path.join(__dirname, 'public', 'user.html');
+  console.log('📁 File path:', filePath);
+  console.log('✅ File exists:', fs.existsSync(filePath));
+  
+  if (fs.existsSync(filePath)) {
+    res.sendFile(filePath);
+  } else {
+    console.log('❌ File not found!');
+    res.status(404).send('File not found');
+  }
 });
 
 // --- تشغيل السيرفر ---
