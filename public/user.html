@@ -2,72 +2,131 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>لوحة المستخدم</title>
   <style>
-    body { font-family: sans-serif; background: #f5f5f5; padding: 20px; }
-    .card { background: white; padding: 20px; border-radius: 10px; max-width: 500px; margin: auto; }
-    h1 { text-align: center; color: #333; }
-    input, button { width: 100%; padding: 10px; margin: 5px 0; }
-    .qr { text-align: center; margin-top: 20px; }
+    body {
+      font-family: Tahoma, sans-serif;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+    .container {
+      background: #fff;
+      border-radius: 15px;
+      padding: 30px;
+      width: 100%;
+      max-width: 500px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+      text-align: center;
+    }
+    h1 {
+      margin-bottom: 20px;
+      color: #333;
+    }
+    input {
+      width: 80%;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      margin-bottom: 15px;
+    }
+    button {
+      padding: 10px 20px;
+      border: none;
+      background: #667eea;
+      color: #fff;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #5a6fd8;
+    }
+    .info {
+      margin-top: 20px;
+      text-align: right;
+      font-size: 15px;
+      line-height: 1.6;
+    }
+    .qr {
+      margin: 20px auto;
+    }
+    .qr img {
+      max-width: 200px;
+      border: 3px solid #ccc;
+      border-radius: 10px;
+    }
+    .webhook {
+      margin-top: 20px;
+      padding: 10px;
+      background: #f9f9f9;
+      border-radius: 8px;
+      font-size: 14px;
+      word-break: break-all;
+    }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h1>👤 تسجيل دخول المستخدم</h1>
-    <div id="loginForm">
-      <input type="text" id="phone" placeholder="رقم الهاتف">
-      <button onclick="login()">تسجيل الدخول</button>
-    </div>
-    <div id="userPanel" style="display:none;">
-      <h2>بياناتك</h2>
-      <pre id="me"></pre>
-      <h2>📊 إحصائيات</h2>
-      <div id="stats"></div>
-    </div>
+  <div class="container">
+    <h1>👤 لوحة المستخدم</h1>
+    <input type="text" id="phone" placeholder="ادخل رقم هاتفك" />
+    <button onclick="loadUser()">عرض بياناتي</button>
+
+    <div id="user-info" class="info"></div>
+    <div class="qr" id="qr-container"></div>
+    <div class="webhook" id="webhook"></div>
   </div>
 
-<script>
-async function login(){
-  const phone = document.getElementById("phone").value;
-  const res = await fetch("/api/login", {
-    method:"POST", headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({ phone, role:"user" })
-  });
-  if(res.ok){
-    document.getElementById("loginForm").style.display="none";
-    document.getElementById("userPanel").style.display="block";
-    loadMe();
-    loadStats();
-    setInterval(loadStats, 10000);
-  } else {
-    alert("فشل تسجيل الدخول");
-  }
-}
+  <script>
+    async function loadUser() {
+      const phone = document.getElementById('phone').value.trim();
+      if (!phone) return alert("من فضلك ادخل رقم الهاتف");
 
-async function loadMe(){
-  const res = await fetch("/me");
-  if(res.ok){
-    const d = await res.json();
-    document.getElementById("me").textContent = JSON.stringify(d, null, 2);
-  }
-}
+      try {
+        const res = await fetch(`/api/user/${phone}`);
+        const data = await res.json();
 
-async function loadStats(){
-  const res = await fetch("/me/stats");
-  if(res.ok){
-    const d = await res.json();
-    let html = `
-      <p>📡 الحالة: ${d.connectionStatus}</p>
-      <p>⏱️ مدة التشغيل: ${Math.floor(d.uptimeSeconds/60)} دقيقة</p>
-      <p>✉️ عدد الرسائل المرسلة: ${d.sentMessages}</p>
-      <p>🔗 Webhook: <code>${d.webhookUrl}</code></p>
-    `;
-    if(d.qrImage){
-      html += `<div class="qr"><img src="${d.qrImage}" width="200"></div>`;
+        if (data.error) {
+          document.getElementById('user-info').innerHTML = `<p style="color:red">${data.error}</p>`;
+          return;
+        }
+
+        document.getElementById('user-info').innerHTML = `
+          <p><strong>👤 الاسم:</strong> ${data.name}</p>
+          <p><strong>📱 الرقم:</strong> ${data.whatsappJid}</p>
+          <p><strong>📅 الاشتراك:</strong> ${data.subscription?.status || 'غير معروف'}</p>
+          <p><strong>⏳ ينتهي في:</strong> ${data.subscription?.endDate?.toDate ? new Date(data.subscription.endDate.toDate()).toLocaleDateString('ar-EG') : ''}</p>
+          <p><strong>⚡ مدة تشغيل البوت:</strong> ${data.runningDays} يوم</p>
+          <p><strong>✉️ عدد الرسائل المرسلة:</strong> ${data.sentMessages || 0}</p>
+        `;
+
+        // QR Code
+        if (data.qrImage) {
+          document.getElementById('qr-container').innerHTML = `
+            <h3>📲 امسح الكود لربط الواتساب</h3>
+            <img src="${data.qrImage}" alt="QR Code"/>
+          `;
+        } else {
+          document.getElementById('qr-container').innerHTML = `
+            <p style="color:green">✅ البوت متصل ولا يحتاج QR</p>
+          `;
+        }
+
+        // Webhook link
+        const baseUrl = window.location.origin;
+        document.getElementById('webhook').innerHTML = `
+          🔗 <strong>رابط الويب هوك الخاص بك:</strong><br>
+          ${baseUrl}/webhook/easyorder
+        `;
+
+      } catch (err) {
+        document.getElementById('user-info').innerHTML = `<p style="color:red">خطأ في تحميل البيانات</p>`;
+      }
     }
-    document.getElementById("stats").innerHTML = html;
-  }
-}
-</script>
+  </script>
 </body>
 </html>

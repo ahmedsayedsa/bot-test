@@ -2,38 +2,216 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <title>لوحة الأدمن</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>لوحة الإدارة</title>
+  <style>
+    body {
+      font-family: Tahoma, sans-serif;
+      background: linear-gradient(135deg, #764ba2, #667eea);
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .container {
+      background: #fff;
+      border-radius: 15px;
+      padding: 30px;
+      width: 100%;
+      max-width: 700px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 20px;
+      color: #333;
+    }
+    input, select, textarea {
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+    }
+    button {
+      padding: 10px 20px;
+      border: none;
+      background: #667eea;
+      color: #fff;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #5a6fd8;
+    }
+    .hidden {
+      display: none;
+    }
+    .users {
+      margin-top: 20px;
+    }
+    .user {
+      padding: 10px;
+      margin-bottom: 10px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      background: #fafafa;
+    }
+    .logout {
+      float: left;
+      background: #f44336;
+    }
+    .logout:hover {
+      background: #d32f2f;
+    }
+  </style>
 </head>
 <body>
-  <h2>📋 قائمة المستخدمين</h2>
-  <pre id="users"></pre>
+  <div class="container">
+    <h1>لوحة الإدارة</h1>
 
-  <h3>✏️ تحديث الاشتراك</h3>
-  <form id="subForm">
-    <input type="text" id="phone" placeholder="رقم الهاتف"><br>
-    <input type="number" id="days" placeholder="عدد الأيام"><br>
-    <button type="submit">تحديث</button>
-  </form>
+    <!-- شاشة تسجيل الدخول -->
+    <div id="login-section">
+      <input type="text" id="admin-username" placeholder="اسم المستخدم">
+      <input type="password" id="admin-password" placeholder="كلمة المرور">
+      <button onclick="login()">تسجيل الدخول</button>
+    </div>
+
+    <!-- لوحة التحكم -->
+    <div id="dashboard" class="hidden">
+      <button class="logout" onclick="logout()">تسجيل الخروج</button>
+
+      <h2>➕ إضافة / تعديل مستخدم</h2>
+      <input type="text" id="name" placeholder="اسم المستخدم">
+      <input type="text" id="phone" placeholder="رقم الهاتف">
+      <input type="number" id="days" placeholder="مدة الاشتراك (بالأيام)">
+      <textarea id="template" placeholder="قالب الرسالة (مثال: أهلاً {name}، اشتراكك فعال)"></textarea>
+      <button onclick="saveUser()">حفظ المستخدم</button>
+
+      <h2>👥 جميع المستخدمين</h2>
+      <div id="users-list" class="users"></div>
+    </div>
+  </div>
 
   <script>
-    async function loadUsers() {
-      const res = await fetch('/admin/users');
-      if(res.ok) {
-        const data = await res.json();
-        document.getElementById('users').textContent = JSON.stringify(data, null, 2);
+    const ADMIN_USER = "admin"; // يفضل نخليها env variable
+    const ADMIN_PASS = "123456"; // يفضل برضو تبقى env variable
+
+    // تسجيل الدخول
+    function login() {
+      const user = document.getElementById("admin-username").value;
+      const pass = document.getElementById("admin-password").value;
+
+      if (user === ADMIN_USER && pass === ADMIN_PASS) {
+        localStorage.setItem("isAdmin", "true");
+        document.getElementById("login-section").classList.add("hidden");
+        document.getElementById("dashboard").classList.remove("hidden");
+        loadUsers();
       } else {
-        alert('غير مسموح');
-        location.href = '/login.html';
+        alert("❌ بيانات الدخول غير صحيحة");
       }
     }
-    loadUsers();
 
-    document.getElementById('subForm').onsubmit = async (e) => {
-      e.preventDefault();
-      const phone = document.getElementById('phone').value;
-      const days = parseInt(document.getElementById('days').value);
-      const res = await fetch('/admin/update-subscription',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone,days})});
-      if(res.ok){alert('تم التحديث'); loadUsers();} else alert('خطأ');
+    // تسجيل الخروج
+    function logout() {
+      localStorage.removeItem("isAdmin");
+      document.getElementById("dashboard").classList.add("hidden");
+      document.getElementById("login-section").classList.remove("hidden");
+    }
+
+    // تحميل المستخدمين
+    async function loadUsers() {
+      try {
+        const res = await fetch("/api/users");
+        const users = await res.json();
+
+        const list = document.getElementById("users-list");
+        list.innerHTML = "";
+
+        Object.keys(users).forEach(jid => {
+          const u = users[jid];
+          const div = document.createElement("div");
+          div.className = "user";
+          div.innerHTML = `
+            <p><strong>👤 ${u.name}</strong> (${jid})</p>
+            <p>📅 الحالة: ${u.subscription?.status || "غير معروف"} - ينتهي: ${u.subscription?.endDate?.toDate ? new Date(u.subscription.endDate.toDate()).toLocaleDateString("ar-EG") : ""}</p>
+            <p>✉️ القالب: ${u.messageTemplate || "افتراضي"}</p>
+            <button onclick="editUser('${jid}')">✏️ تعديل</button>
+            <button onclick="deleteUser('${jid}')">🗑️ حذف</button>
+          `;
+          list.appendChild(div);
+        });
+      } catch (err) {
+        alert("خطأ في تحميل المستخدمين");
+      }
+    }
+
+    // حفظ مستخدم
+    async function saveUser() {
+      const name = document.getElementById("name").value.trim();
+      const phone = document.getElementById("phone").value.trim();
+      const days = parseInt(document.getElementById("days").value);
+      const template = document.getElementById("template").value.trim();
+
+      if (!name || !phone || !days) {
+        return alert("من فضلك املأ كل البيانات");
+      }
+
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() + days);
+
+      const res = await fetch("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name, phone, status: "active", endDate, messageTemplate: template
+        })
+      });
+
+      if (res.ok) {
+        alert("✅ تم الحفظ بنجاح");
+        loadUsers();
+      } else {
+        alert("❌ فشل الحفظ");
+      }
+    }
+
+    // تعديل مستخدم
+    function editUser(jid) {
+      fetch(`/api/users`)
+        .then(res => res.json())
+        .then(users => {
+          const u = users[jid];
+          if (!u) return;
+
+          document.getElementById("name").value = u.name;
+          document.getElementById("phone").value = u.whatsappJid.replace("@s.whatsapp.net", "");
+          document.getElementById("template").value = u.messageTemplate || "";
+        });
+    }
+
+    // حذف مستخدم
+    async function deleteUser(jid) {
+      if (!confirm("هل أنت متأكد من الحذف؟")) return;
+
+      const res = await fetch(`/api/users/${jid}`, { method: "DELETE" });
+      if (res.ok) {
+        alert("🗑️ تم الحذف");
+        loadUsers();
+      } else {
+        alert("❌ فشل الحذف");
+      }
+    }
+
+    // تحقق من تسجيل الدخول عند تحميل الصفحة
+    window.onload = () => {
+      if (localStorage.getItem("isAdmin") === "true") {
+        document.getElementById("login-section").classList.add("hidden");
+        document.getElementById("dashboard").classList.remove("hidden");
+        loadUsers();
+      }
     };
   </script>
 </body>
