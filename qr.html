@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>ربط واتساب</title>
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background-color: #f0f2f5; }
+        #qr-container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; }
+        #qrcode { margin-top: 20px; }
+        h1 { color: #1c1e21; }
+        p { color: #606770; }
+    </style>
+    <!-- مكتبة لتحويل النص إلى صورة QR Code -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode-generator/qrcode.js"></script>
+</head>
+<body>
+    <div id="qr-container">
+        <h1>امسح الكود لربط واتساب</h1>
+        <p id="status">جاري طلب الكود من الخادم...</p>
+        <div id="qrcode"></div>
+    </div>
+
+    <script type="module">
+        // هذا الكود سيعمل فقط على Cloud Run لأنه يستخدم واجهة Google الداخلية
+        // لاختبار هذا محلياً، ستحتاج إلى إعداد مختلف
+        async function fetchToken( ) {
+            const response = await fetch("http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token?scopes=https://www.googleapis.com/auth/datastore", {
+                headers: { "Metadata-Flavor": "Google" }
+            } );
+            const data = await response.json();
+            return data.access_token;
+        }
+
+        async function getQrCode(token) {
+            const projectId = "level-choir-469612-t2"; // <-- ضع معرف المشروع الخاص بك هنا
+            const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default )/documents/system_status/whatsapp`;
+            
+            const response = await fetch(url, {
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+
+            if (!response.ok) {
+                console.error("Failed to fetch from Firestore:", response.statusText);
+                return null;
+            }
+            
+            const data = await response.json();
+            return data.fields.qr_code.stringValue;
+        }
+
+        function displayQRCode(qrText) {
+            const typeNumber = 4;
+            const errorCorrectionLevel = 'L';
+            const qr = qrcode(typeNumber, errorCorrectionLevel);
+            qr.addData(qrText);
+            qr.make();
+            document.getElementById('qrcode').innerHTML = qr.createImgTag(6); // حجم الكود
+            document.getElementById('status').textContent = "الكود جاهز للمسح!";
+        }
+
+        async function main() {
+            try {
+                const token = await fetchToken();
+                const qrText = await getQrCode(token);
+                if (qrText) {
+                    displayQRCode(qrText);
+                } else {
+                    document.getElementById('status').textContent = "لم يتم العثور على كود. قد يكون البوت متصلاً بالفعل أو هناك مشكلة.";
+                }
+            } catch (error) {
+                console.error("Error:", error);
+                document.getElementById('status').textContent = "حدث خطأ أثناء جلب الكود.";
+            }
+        }
+
+        // ابدأ العملية
+        main();
+        // يمكنك إضافة setInterval هنا لعمل تحديث دوري
+    </script>
+</body>
+</html>
