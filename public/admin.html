@@ -1,218 +1,283 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>لوحة الإدارة</title>
-  <style>
-    body {
-      font-family: Tahoma, sans-serif;
-      background: linear-gradient(135deg, #764ba2, #667eea);
-      margin: 0;
-      padding: 0;
-      min-height: 100vh;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
-    .container {
-      background: #fff;
-      border-radius: 15px;
-      padding: 30px;
-      width: 100%;
-      max-width: 700px;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-    }
-    h1 {
-      text-align: center;
-      margin-bottom: 20px;
-      color: #333;
-    }
-    input, select, textarea {
-      width: 100%;
-      padding: 10px;
-      margin: 8px 0;
-      border: 1px solid #ccc;
-      border-radius: 8px;
-    }
-    button {
-      padding: 10px 20px;
-      border: none;
-      background: #667eea;
-      color: #fff;
-      border-radius: 8px;
-      cursor: pointer;
-    }
-    button:hover {
-      background: #5a6fd8;
-    }
-    .hidden {
-      display: none;
-    }
-    .users {
-      margin-top: 20px;
-    }
-    .user {
-      padding: 10px;
-      margin-bottom: 10px;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      background: #fafafa;
-    }
-    .logout {
-      float: left;
-      background: #f44336;
-    }
-    .logout:hover {
-      background: #d32f2f;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لوحة تحكم الأدمن</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            margin: 0;
+            padding: 20px;
+            direction: rtl;
+        }
+        .header {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .users-table {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 12px;
+            text-align: right;
+            border-bottom: 1px solid #eee;
+        }
+        th {
+            background: #667eea;
+            color: white;
+        }
+        .active {
+            color: green;
+        }
+        .inactive {
+            color: red;
+        }
+        .btn {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 2px;
+        }
+        .btn-primary { background: #667eea; color: white; }
+        .btn-danger { background: #e74c3c; color: white; }
+        .btn-success { background: #27ae60; color: white; }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+        }
+        .modal-content {
+            background: white;
+            margin: 5% auto;
+            padding: 20px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 500px;
+        }
+    </style>
 </head>
 <body>
-  <div class="container">
-    <h1>لوحة الإدارة</h1>
-
-    <!-- شاشة تسجيل الدخول -->
-    <div id="login-section">
-      <input type="text" id="admin-username" placeholder="اسم المستخدم">
-      <input type="password" id="admin-password" placeholder="كلمة المرور">
-      <button onclick="login()">تسجيل الدخول</button>
+    <div class="header">
+        <h1>👨‍💼 لوحة تحكم الأدمن</h1>
+        <button class="btn btn-primary" onclick="showAddUserModal()">➕ إضافة مستخدم</button>
+        <button class="btn btn-danger" onclick="logout()">🚪 تسجيل الخروج</button>
     </div>
 
-    <!-- لوحة التحكم -->
-    <div id="dashboard" class="hidden">
-      <button class="logout" onclick="logout()">تسجيل الخروج</button>
-
-      <h2>➕ إضافة / تعديل مستخدم</h2>
-      <input type="text" id="name" placeholder="اسم المستخدم">
-      <input type="text" id="phone" placeholder="رقم الهاتف">
-      <input type="number" id="days" placeholder="مدة الاشتراك (بالأيام)">
-      <textarea id="template" placeholder="قالب الرسالة (مثال: أهلاً {name}، اشتراكك فعال)"></textarea>
-      <button onclick="saveUser()">حفظ المستخدم</button>
-
-      <h2>👥 جميع المستخدمين</h2>
-      <div id="users-list" class="users"></div>
+    <div class="stats">
+        <div class="stat-card">
+            <h3>👥 عدد المستخدمين</h3>
+            <p id="totalUsers">0</p>
+        </div>
+        <div class="stat-card">
+            <h3>✅ المشتركين النشطين</h3>
+            <p id="activeUsers">0</p>
+        </div>
+        <div class="stat-card">
+            <h3>📊 إجمالي الرسائل</h3>
+            <p id="totalMessages">0</p>
+        </div>
     </div>
-  </div>
 
-  <script>
-    const ADMIN_USER = "admin"; // يفضل نخليها env variable
-    const ADMIN_PASS = "123456"; // يفضل برضو تبقى env variable
+    <div class="users-table">
+        <table>
+            <thead>
+                <tr>
+                    <th>الاسم</th>
+                    <th>رقم الهاتف</th>
+                    <th>الحالة</th>
+                    <th>الأيام المتبقية</th>
+                    <th>الرسائل المرسلة</th>
+                    <th>الإجراءات</th>
+                </tr>
+            </thead>
+            <tbody id="usersTableBody"></tbody>
+        </table>
+    </div>
 
-    // تسجيل الدخول
-    function login() {
-      const user = document.getElementById("admin-username").value;
-      const pass = document.getElementById("admin-password").value;
+    <!-- Modal لإضافة/تعديل مستخدم -->
+    <div id="userModal" class="modal">
+        <div class="modal-content">
+            <h2 id="modalTitle">إضافة مستخدم</h2>
+            <input type="hidden" id="editPhone">
+            <input type="text" id="userName" placeholder="اسم المستخدم" style="width: 100%; margin: 10px 0; padding: 10px;">
+            <input type="text" id="userPhone" placeholder="رقم الهاتف" style="width: 100%; margin: 10px 0; padding: 10px;">
+            <select id="userStatus" style="width: 100%; margin: 10px 0; padding: 10px;">
+                <option value="active">نشط</option>
+                <option value="inactive">غير نشط</option>
+            </select>
+            <input type="date" id="userEndDate" style="width: 100%; margin: 10px 0; padding: 10px;">
+            <textarea id="userTemplate" placeholder="قالب الرسالة (استخدم {name} و {endDate})" style="width: 100%; margin: 10px 0; padding: 10px; height: 100px;"></textarea>
+            <button class="btn btn-success" onclick="saveUser()">حفظ</button>
+            <button class="btn btn-danger" onclick="closeModal()">إلغاء</button>
+        </div>
+    </div>
 
-      if (user === ADMIN_USER && pass === ADMIN_PASS) {
-        localStorage.setItem("isAdmin", "true");
-        document.getElementById("login-section").classList.add("hidden");
-        document.getElementById("dashboard").classList.remove("hidden");
+    <script>
+        let authToken = localStorage.getItem('authToken');
+        if (!authToken) window.location.href = '/login';
+
+        async function loadUsers() {
+            try {
+                const response = await fetch('/api/users', {
+                    headers: { 'Authorization': 'Basic ' + authToken }
+                });
+                
+                if (response.status === 401) {
+                    logout();
+                    return;
+                }
+
+                const users = await response.json();
+                
+                document.getElementById('totalUsers').textContent = users.length;
+                document.getElementById('activeUsers').textContent = users.filter(u => u.isActive).length;
+                document.getElementById('totalMessages').textContent = users.reduce((sum, u) => sum + (u.sentMessages || 0), 0);
+
+                const tbody = document.getElementById('usersTableBody');
+                tbody.innerHTML = '';
+
+                users.forEach(user => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${user.name}</td>
+                        <td>${user.whatsappJid}</td>
+                        <td class="${user.isActive ? 'active' : 'inactive'}">
+                            ${user.isActive ? 'نشط' : 'غير نشط'}
+                        </td>
+                        <td>${user.daysLeft} يوم</td>
+                        <td>${user.sentMessages || 0}</td>
+                        <td>
+                            <button class="btn btn-primary" onclick="editUser('${user.whatsappJid}')">تعديل</button>
+                            <button class="btn btn-danger" onclick="deleteUser('${user.whatsappJid}')">حذف</button>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } catch (error) {
+                console.error('Error loading users:', error);
+            }
+        }
+
+        function showAddUserModal() {
+            document.getElementById('modalTitle').textContent = 'إضافة مستخدم';
+            document.getElementById('editPhone').value = '';
+            document.getElementById('userName').value = '';
+            document.getElementById('userPhone').value = '';
+            document.getElementById('userStatus').value = 'active';
+            document.getElementById('userEndDate').value = '';
+            document.getElementById('userTemplate').value = 'أهلاً {name}، اشتراكك فعال حتى {endDate}';
+            document.getElementById('userModal').style.display = 'block';
+        }
+
+        async function editUser(phone) {
+            try {
+                const response = await fetch(`/api/user/${phone.split('@')[0]}`, {
+                    headers: { 'Authorization': 'Basic ' + authToken }
+                });
+                const user = await response.json();
+
+                document.getElementById('modalTitle').textContent = 'تعديل مستخدم';
+                document.getElementById('editPhone').value = phone;
+                document.getElementById('userName').value = user.name;
+                document.getElementById('userPhone').value = phone.split('@')[0];
+                document.getElementById('userStatus').value = user.subscription?.status || 'active';
+                document.getElementById('userEndDate').value = user.subscription?.endDate?.toDate().toISOString().split('T')[0];
+                document.getElementById('userTemplate').value = user.messageTemplate;
+                document.getElementById('userModal').style.display = 'block';
+            } catch (error) {
+                console.error('Error loading user:', error);
+            }
+        }
+
+        async function saveUser() {
+            const phone = document.getElementById('editPhone').value || document.getElementById('userPhone').value;
+            const userData = {
+                name: document.getElementById('userName').value,
+                phone: document.getElementById('userPhone').value,
+                status: document.getElementById('userStatus').value,
+                endDate: document.getElementById('userEndDate').value,
+                messageTemplate: document.getElementById('userTemplate').value
+            };
+
+            try {
+                const response = await fetch('/api/users', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Basic ' + authToken
+                    },
+                    body: JSON.stringify(userData)
+                });
+
+                if (response.ok) {
+                    closeModal();
+                    loadUsers();
+                }
+            } catch (error) {
+                console.error('Error saving user:', error);
+            }
+        }
+
+        async function deleteUser(phone) {
+            if (!confirm('هل أنت متأكد من حذف هذا المستخدم؟')) return;
+            
+            try {
+                const response = await fetch(`/api/users/${phone.split('@')[0]}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': 'Basic ' + authToken }
+                });
+
+                if (response.ok) {
+                    loadUsers();
+                }
+            } catch (error) {
+                console.error('Error deleting user:', error);
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('userModal').style.display = 'none';
+        }
+
+        function logout() {
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('userType');
+            window.location.href = '/login';
+        }
+
+        // تحميل البيانات عند فتح الصفحة
         loadUsers();
-      } else {
-        alert("❌ بيانات الدخول غير صحيحة");
-      }
-    }
-
-    // تسجيل الخروج
-    function logout() {
-      localStorage.removeItem("isAdmin");
-      document.getElementById("dashboard").classList.add("hidden");
-      document.getElementById("login-section").classList.remove("hidden");
-    }
-
-    // تحميل المستخدمين
-    async function loadUsers() {
-      try {
-        const res = await fetch("/api/users");
-        const users = await res.json();
-
-        const list = document.getElementById("users-list");
-        list.innerHTML = "";
-
-        Object.keys(users).forEach(jid => {
-          const u = users[jid];
-          const div = document.createElement("div");
-          div.className = "user";
-          div.innerHTML = `
-            <p><strong>👤 ${u.name}</strong> (${jid})</p>
-            <p>📅 الحالة: ${u.subscription?.status || "غير معروف"} - ينتهي: ${u.subscription?.endDate?.toDate ? new Date(u.subscription.endDate.toDate()).toLocaleDateString("ar-EG") : ""}</p>
-            <p>✉️ القالب: ${u.messageTemplate || "افتراضي"}</p>
-            <button onclick="editUser('${jid}')">✏️ تعديل</button>
-            <button onclick="deleteUser('${jid}')">🗑️ حذف</button>
-          `;
-          list.appendChild(div);
-        });
-      } catch (err) {
-        alert("خطأ في تحميل المستخدمين");
-      }
-    }
-
-    // حفظ مستخدم
-    async function saveUser() {
-      const name = document.getElementById("name").value.trim();
-      const phone = document.getElementById("phone").value.trim();
-      const days = parseInt(document.getElementById("days").value);
-      const template = document.getElementById("template").value.trim();
-
-      if (!name || !phone || !days) {
-        return alert("من فضلك املأ كل البيانات");
-      }
-
-      const endDate = new Date();
-      endDate.setDate(endDate.getDate() + days);
-
-      const res = await fetch("/api/users", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name, phone, status: "active", endDate, messageTemplate: template
-        })
-      });
-
-      if (res.ok) {
-        alert("✅ تم الحفظ بنجاح");
-        loadUsers();
-      } else {
-        alert("❌ فشل الحفظ");
-      }
-    }
-
-    // تعديل مستخدم
-    function editUser(jid) {
-      fetch(`/api/users`)
-        .then(res => res.json())
-        .then(users => {
-          const u = users[jid];
-          if (!u) return;
-
-          document.getElementById("name").value = u.name;
-          document.getElementById("phone").value = u.whatsappJid.replace("@s.whatsapp.net", "");
-          document.getElementById("template").value = u.messageTemplate || "";
-        });
-    }
-
-    // حذف مستخدم
-    async function deleteUser(jid) {
-      if (!confirm("هل أنت متأكد من الحذف؟")) return;
-
-      const res = await fetch(`/api/users/${jid}`, { method: "DELETE" });
-      if (res.ok) {
-        alert("🗑️ تم الحذف");
-        loadUsers();
-      } else {
-        alert("❌ فشل الحذف");
-      }
-    }
-
-    // تحقق من تسجيل الدخول عند تحميل الصفحة
-    window.onload = () => {
-      if (localStorage.getItem("isAdmin") === "true") {
-        document.getElementById("login-section").classList.add("hidden");
-        document.getElementById("dashboard").classList.remove("hidden");
-        loadUsers();
-      }
-    };
-  </script>
+        setInterval(loadUsers, 30000); // تحديث كل 30 ثانية
+    </script>
 </body>
 </html>

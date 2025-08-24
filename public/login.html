@@ -1,39 +1,183 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-  <meta charset="UTF-8">
-  <title>تسجيل الدخول</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تسجيل الدخول</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .login-container {
+            background: white;
+            border-radius: 15px;
+            padding: 40px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+            text-align: right;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+            font-weight: bold;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+        input:focus {
+            border-color: #667eea;
+            outline: none;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-bottom: 15px;
+        }
+        button:hover {
+            background: #5a6fd8;
+        }
+        .user-type {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .user-type label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+        .error {
+            color: #e74c3c;
+            margin-top: 10px;
+        }
+        .default-credentials {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+    </style>
 </head>
 <body>
-  <h2>🔑 تسجيل الدخول كمستخدم</h2>
-  <form id="userForm">
-    <input type="text" id="phone" placeholder="رقم الهاتف"><br>
-    <input type="password" id="password" placeholder="كلمة السر"><br>
-    <button type="submit">دخول</button>
-  </form>
+    <div class="login-container">
+        <h1>🔐 تسجيل الدخول</h1>
+        
+        <div class="user-type">
+            <label>
+                <input type="radio" name="userType" value="admin" checked> أدمن
+            </label>
+            <label>
+                <input type="radio" name="userType" value="user"> مستخدم
+            </label>
+        </div>
 
-  <h2>🛠️ تسجيل الدخول كأدمن</h2>
-  <form id="adminForm">
-    <input type="text" id="username" placeholder="اسم المستخدم"><br>
-    <input type="password" id="adminPassword" placeholder="كلمة السر"><br>
-    <button type="submit">دخول</button>
-  </form>
+        <div class="form-group">
+            <label for="username">اسم المستخدم:</label>
+            <input type="text" id="username" placeholder="ادخل اسم المستخدم">
+        </div>
 
-  <script>
-    document.getElementById('userForm').onsubmit = async (e) => {
-      e.preventDefault();
-      const phone = document.getElementById('phone').value;
-      const password = document.getElementById('password').value;
-      const res = await fetch('/login/user', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone,password})});
-      if(res.ok) location.href = '/user.html'; else alert('خطأ في الدخول');
-    };
-    document.getElementById('adminForm').onsubmit = async (e) => {
-      e.preventDefault();
-      const username = document.getElementById('username').value;
-      const password = document.getElementById('adminPassword').value;
-      const res = await fetch('/login/admin', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
-      if(res.ok) location.href = '/admin.html'; else alert('خطأ في الدخول');
-    };
-  </script>
+        <div class="form-group">
+            <label for="password">كلمة المرور:</label>
+            <input type="password" id="password" placeholder="ادخل كلمة المرور">
+        </div>
+
+        <div id="phoneField" class="form-group" style="display: none;">
+            <label for="phone">رقم الهاتف:</label>
+            <input type="text" id="phone" placeholder="ادخل رقم الهاتف">
+        </div>
+
+        <button onclick="login()">تسجيل الدخول</button>
+
+        <div id="error" class="error"></div>
+
+        <div class="default-credentials">
+            <strong>بيانات الدخول الافتراضية للأدمن:</strong><br>
+            اسم المستخدم: <code>admin</code><br>
+            كلمة المرور: <code>admin123</code>
+        </div>
+    </div>
+
+    <script>
+        document.querySelectorAll('input[name="userType"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                document.getElementById('phoneField').style.display = 
+                    this.value === 'user' ? 'block' : 'none';
+            });
+        });
+
+        async function login() {
+            const userType = document.querySelector('input[name="userType"]:checked').value;
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const phone = document.getElementById('phone').value;
+            
+            document.getElementById('error').textContent = '';
+
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        username: userType === 'user' ? 'user' : username,
+                        password: userType === 'user' ? phone : password,
+                        phone: userType === 'user' ? phone : null
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    localStorage.setItem('authToken', data.token);
+                    localStorage.setItem('userType', data.type);
+                    
+                    if (data.type === 'admin') {
+                        window.location.href = '/admin';
+                    } else {
+                        window.location.href = '/user';
+                    }
+                } else {
+                    document.getElementById('error').textContent = data.error;
+                }
+            } catch (error) {
+                document.getElementById('error').textContent = 'خطأ في الاتصال بالسيرفر';
+            }
+        }
+
+        // السماح بالدخول عن طريق Enter
+        document.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') login();
+        });
+    </script>
 </body>
 </html>
