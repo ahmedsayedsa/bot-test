@@ -1,1 +1,62 @@
-<!doctype html><html><meta charset='utf-8'><body><h2>Seller UI</h2><p>Use the admin endpoints to set template.</p></body></html>
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>تخصيص قالب الرسالة</title>
+    <link rel="stylesheet" href="/style.css">
+    <style>
+        textarea {
+            width: calc(100% - 22px);
+            height: 150px;
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-family: inherit;
+        }
+        .success-message {
+            color: green;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>تخصيص قالب الرسالة</h1>
+
+    <div class="form-section">
+        <h2>احفظ رسالتك المخصصة</h2>
+        <form id="templateForm">
+            <input type="text" id="phone" placeholder="رقم الواتساب الخاص بك (مثال: 201001234567)" required>
+            <textarea id="template" placeholder="اكتب رسالتك هنا. يمكنك استخدام المتغيرات التالية: {name}, {phone}, {address}, {total}, {order_id}, {product}" required></textarea>
+            <p>مثال: مرحباً {name}! طلبك رقم {order_id} يحتوي على {product} وهو في الطريق إليك.</p>
+            <button type="submit">حفظ القالب</button>
+        </form>
+        <p id="successMessage" class="success-message" style="display:none;">تم حفظ القالب بنجاح!</p>
+    </div>
+
+    <script>
+        const templateForm = document.getElementById('templateForm');
+        const phoneInput = document.getElementById('phone');
+        const templateInput = document.getElementById('template');
+        const successMessage = document.getElementById('successMessage');
+
+        templateForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const phone = phoneInput.value;
+            const template = templateInput.value;
+
+            await fetch(`/api/template/${phone}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ template: template })
+            });
+
+            successMessage.style.display = 'block';
+            setTimeout(() => {
+                successMessage.style.display = 'none';
+            }, 3000);
+        });
+    </script>
+</body>
+</html>
