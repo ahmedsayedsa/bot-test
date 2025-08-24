@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>تسجيل الدخول</title>
+</head>
+<body>
+  <h2>🔑 تسجيل الدخول كمستخدم</h2>
+  <form id="userForm">
+    <input type="text" id="phone" placeholder="رقم الهاتف"><br>
+    <input type="password" id="password" placeholder="كلمة السر"><br>
+    <button type="submit">دخول</button>
+  </form>
+
+  <h2>🛠️ تسجيل الدخول كأدمن</h2>
+  <form id="adminForm">
+    <input type="text" id="username" placeholder="اسم المستخدم"><br>
+    <input type="password" id="adminPassword" placeholder="كلمة السر"><br>
+    <button type="submit">دخول</button>
+  </form>
+
+  <script>
+    document.getElementById('userForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const phone = document.getElementById('phone').value;
+      const password = document.getElementById('password').value;
+      const res = await fetch('/login/user', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone,password})});
+      if(res.ok) location.href = '/user.html'; else alert('خطأ في الدخول');
+    };
+    document.getElementById('adminForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('adminPassword').value;
+      const res = await fetch('/login/admin', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
+      if(res.ok) location.href = '/admin.html'; else alert('خطأ في الدخول');
+    };
+  </script>
+</body>
+</html>

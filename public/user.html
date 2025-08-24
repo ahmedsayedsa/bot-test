@@ -1,62 +1,73 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <title>تخصيص قالب الرسالة</title>
-    <link rel="stylesheet" href="/style.css">
-    <style>
-        textarea {
-            width: calc(100% - 22px);
-            height: 150px;
-            padding: 10px;
-            margin: 5px 0;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            font-family: inherit;
-        }
-        .success-message {
-            color: green;
-            font-weight: bold;
-            margin-top: 10px;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>لوحة المستخدم</title>
+  <style>
+    body { font-family: sans-serif; background: #f5f5f5; padding: 20px; }
+    .card { background: white; padding: 20px; border-radius: 10px; max-width: 500px; margin: auto; }
+    h1 { text-align: center; color: #333; }
+    input, button { width: 100%; padding: 10px; margin: 5px 0; }
+    .qr { text-align: center; margin-top: 20px; }
+  </style>
 </head>
 <body>
-    <h1>تخصيص قالب الرسالة</h1>
-
-    <div class="form-section">
-        <h2>احفظ رسالتك المخصصة</h2>
-        <form id="templateForm">
-            <input type="text" id="phone" placeholder="رقم الواتساب الخاص بك (مثال: 201001234567)" required>
-            <textarea id="template" placeholder="اكتب رسالتك هنا. يمكنك استخدام المتغيرات التالية: {name}, {phone}, {address}, {total}, {order_id}, {product}" required></textarea>
-            <p>مثال: مرحباً {name}! طلبك رقم {order_id} يحتوي على {product} وهو في الطريق إليك.</p>
-            <button type="submit">حفظ القالب</button>
-        </form>
-        <p id="successMessage" class="success-message" style="display:none;">تم حفظ القالب بنجاح!</p>
+  <div class="card">
+    <h1>👤 تسجيل دخول المستخدم</h1>
+    <div id="loginForm">
+      <input type="text" id="phone" placeholder="رقم الهاتف">
+      <button onclick="login()">تسجيل الدخول</button>
     </div>
+    <div id="userPanel" style="display:none;">
+      <h2>بياناتك</h2>
+      <pre id="me"></pre>
+      <h2>📊 إحصائيات</h2>
+      <div id="stats"></div>
+    </div>
+  </div>
 
-    <script>
-        const templateForm = document.getElementById('templateForm');
-        const phoneInput = document.getElementById('phone');
-        const templateInput = document.getElementById('template');
-        const successMessage = document.getElementById('successMessage');
+<script>
+async function login(){
+  const phone = document.getElementById("phone").value;
+  const res = await fetch("/api/login", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({ phone, role:"user" })
+  });
+  if(res.ok){
+    document.getElementById("loginForm").style.display="none";
+    document.getElementById("userPanel").style.display="block";
+    loadMe();
+    loadStats();
+    setInterval(loadStats, 10000);
+  } else {
+    alert("فشل تسجيل الدخول");
+  }
+}
 
-        templateForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const phone = phoneInput.value;
-            const template = templateInput.value;
+async function loadMe(){
+  const res = await fetch("/me");
+  if(res.ok){
+    const d = await res.json();
+    document.getElementById("me").textContent = JSON.stringify(d, null, 2);
+  }
+}
 
-            await fetch(`/api/template/${phone}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ template: template })
-            });
-
-            successMessage.style.display = 'block';
-            setTimeout(() => {
-                successMessage.style.display = 'none';
-            }, 3000);
-        });
-    </script>
+async function loadStats(){
+  const res = await fetch("/me/stats");
+  if(res.ok){
+    const d = await res.json();
+    let html = `
+      <p>📡 الحالة: ${d.connectionStatus}</p>
+      <p>⏱️ مدة التشغيل: ${Math.floor(d.uptimeSeconds/60)} دقيقة</p>
+      <p>✉️ عدد الرسائل المرسلة: ${d.sentMessages}</p>
+      <p>🔗 Webhook: <code>${d.webhookUrl}</code></p>
+    `;
+    if(d.qrImage){
+      html += `<div class="qr"><img src="${d.qrImage}" width="200"></div>`;
+    }
+    document.getElementById("stats").innerHTML = html;
+  }
+}
+</script>
 </body>
 </html>

@@ -1,98 +1,40 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <title>لوحة تحكم المشتركين</title>
-    <link rel="stylesheet" href="/style.css">
+  <meta charset="UTF-8">
+  <title>لوحة الأدمن</title>
 </head>
 <body>
-    <h1>لوحة تحكم المشتركين</h1>
+  <h2>📋 قائمة المستخدمين</h2>
+  <pre id="users"></pre>
 
-    <div class="form-section">
-        <h2>إضافة أو تحديث مستخدم</h2>
-        <form id="userForm">
-            <input type="text" id="name" placeholder="اسم المستخدم" required>
-            <input type="text" id="phone" placeholder="رقم الواتساب (مثال: 201001234567)" required>
-            <select id="status" required>
-                <option value="active">فعال (Active)</option>
-                <option value="expired">منتهي (Expired)</option>
-            </select>
-            <input type="date" id="endDate" placeholder="تاريخ الانتهاء" required>
-            <button type="submit">حفظ التغييرات</button>
-        </form>
-    </div>
+  <h3>✏️ تحديث الاشتراك</h3>
+  <form id="subForm">
+    <input type="text" id="phone" placeholder="رقم الهاتف"><br>
+    <input type="number" id="days" placeholder="عدد الأيام"><br>
+    <button type="submit">تحديث</button>
+  </form>
 
-    <h2>قائمة المستخدمين</h2>
-    <table id="usersTable">
-        <thead>
-            <tr>
-                <th>الاسم</th>
-                <th>رقم الواتساب</th>
-                <th>حالة الاشتراك</th>
-                <th>تاريخ الانتهاء</th>
-                <th>إجراءات</th>
-            </tr>
-        </thead>
-        <tbody></tbody>
-    </table>
+  <script>
+    async function loadUsers() {
+      const res = await fetch('/admin/users');
+      if(res.ok) {
+        const data = await res.json();
+        document.getElementById('users').textContent = JSON.stringify(data, null, 2);
+      } else {
+        alert('غير مسموح');
+        location.href = '/login.html';
+      }
+    }
+    loadUsers();
 
-    <script>
-        const usersTableBody = document.querySelector('#usersTable tbody');
-        const userForm = document.getElementById('userForm');
-        const nameInput = document.getElementById('name');
-        const phoneInput = document.getElementById('phone');
-        const statusInput = document.getElementById('status');
-        const endDateInput = document.getElementById('endDate');
-
-        async function fetchUsers() {
-            const response = await fetch('/api/users');
-            const users = await response.json();
-            usersTableBody.innerHTML = '';
-            for (const userId in users) {
-                const user = users[userId];
-                const sub = user.subscription || {};
-                const endDate = sub.endDate ? new Date(sub.endDate).toLocaleDateString('ar-EG') : 'N/A';
-                const row = `
-                    <tr>
-                        <td>${user.name}</td>
-                        <td>${user.whatsappJid}</td>
-                        <td>${sub.status || 'N/A'}</td>
-                        <td>${endDate}</td>
-                        <td><button class="edit-btn" onclick="editUser('${userId}')">تعديل</button></td>
-                    </tr>
-                `;
-                usersTableBody.innerHTML += row;
-            }
-        }
-
-        async function editUser(userId) {
-            const response = await fetch('/api/users');
-            const users = await response.json();
-            const user = users[userId];
-            nameInput.value = user.name;
-            phoneInput.value = user.whatsappJid.split('@')[0];
-            statusInput.value = user.subscription.status;
-            endDateInput.value = user.subscription.endDate ? user.subscription.endDate.split('T')[0] : '';
-        }
-
-        userForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const userData = {
-                name: nameInput.value,
-                phone: phoneInput.value,
-                status: statusInput.value,
-                endDate: endDateInput.value
-            };
-            await fetch('/api/users', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(userData)
-            });
-            userForm.reset();
-            fetchUsers();
-        });
-
-        fetchUsers();
-    </script>
+    document.getElementById('subForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const phone = document.getElementById('phone').value;
+      const days = parseInt(document.getElementById('days').value);
+      const res = await fetch('/admin/update-subscription',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone,days})});
+      if(res.ok){alert('تم التحديث'); loadUsers();} else alert('خطأ');
+    };
+  </script>
 </body>
 </html>

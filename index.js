@@ -2,6 +2,7 @@ const path = require('path');
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
+const session = require('express-session');
 require('dotenv').config();
 
 const { default: makeWASocket, DisconnectReason, useMultiFileAuthState } = require('@whiskeysockets/baileys');
@@ -13,15 +14,23 @@ const app = express();
 const firestore = new Firestore();
 const usersCollection = firestore.collection('users');
 
+// --- إعداد Express ---
 app.use(cors());
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, 'public')));
+app.use(session({
+    secret: process.env.SESSION_SECRET || "whatsapp-secret",
+    resave: false,
+    saveUninitialized: true,
+}));
 
 // --- بوت واتساب ---
 const AUTH_DIR = path.join(__dirname, 'auth_info_session');
 let sock = null;
 let qrCode = null;
 let connectionStatus = 'disconnected';
+let startTime = new Date();
+let sentMessagesCount = 0;
 
 async function startWhatsApp() {
     try {
@@ -32,25 +41,58 @@ async function startWhatsApp() {
             auth: state,
             printQRInTerminal: false,
             browser: ["Ubuntu", "Chrome", "22.04.4"],
+            connectTimeoutMs: 60000,
+            defaultQueryTimeoutMs: 60000,
+            keepAliveIntervalMs: 10000,
+            retryRequestDelayMs: 1000
         });
-
-        sock.ev.on('creds.update', saveCreds);
 
         sock.ev.on('connection.update', (update) => {
             const { connection, lastDisconnect, qr } = update;
-
             if (qr) qrCode = qr;
-
             if (connection === 'open') {
-                console.log('✅ WhatsApp connected');
                 connectionStatus = 'connected';
                 qrCode = null;
+                console.log('✅ WhatsApp connected');
             }
-
             if (connection === 'close') {
                 connectionStatus = 'disconnected';
                 const shouldReconnect = (lastDisconnect.error)?.output?.statusCode !== DisconnectReason.loggedOut;
                 if (shouldReconnect) setTimeout(startWhatsApp, 5000);
+            }
+        });
+
+        sock.ev.on('creds.update', saveCreds);
+
+        sock.ev.on('messages.upsert', async (m) => {
+            const msg = m.messages[0];
+            if (!msg.message || !msg.key.remoteJid || msg.key.fromMe) return;
+            const senderJid = msg.key.remoteJid;
+            if (senderJid.endsWith('@g.us')) return;
+
+            try {
+                const userDoc = await usersCollection.doc(senderJid).get();
+                if (!userDoc.exists) {
+                    await sock.sendMessage(senderJid, { text: "أهلاً بك! أنت غير مسجل." });
+                    sentMessagesCount++;
+                    return;
+                }
+
+                const userData = userDoc.data();
+                const sub = userData.subscription;
+                if (!sub || sub.status !== 'active' || new Date(sub.endDate.toDate()) < new Date()) {
+                    await sock.sendMessage(senderJid, { text: "عذراً، اشتراكك غير فعال أو انتهى." });
+                    sentMessagesCount++;
+                    return;
+                }
+
+                let welcomeMessage = userData.messageTemplate || `أهلاً {name}، اشتراكك فعال.`;
+                welcomeMessage = welcomeMessage.replace(/\{name\}/g, userData.name);
+                await sock.sendMessage(senderJid, { text: welcomeMessage });
+                sentMessagesCount++;
+
+            } catch (err) {
+                console.error("Error processing message:", err);
             }
         });
 
@@ -60,143 +102,116 @@ async function startWhatsApp() {
     }
 }
 
-// --- Webhook EasyOrder ---
-app.post('/webhook/order', async (req, res) => {
-    try {
-        const { customer_name, customer_phone, product_name } = req.body;
-        if (!customer_name || !customer_phone) {
-            return res.status(400).json({ error: "Invalid order data" });
+// --- Middleware تسجيل الدخول ---
+function requireLogin(role) {
+    return (req, res, next) => {
+        if (!req.session.user || (role && req.session.user.role !== role)) {
+            return res.status(401).json({ error: "Unauthorized" });
         }
+        next();
+    };
+}
 
-        const jid = customer_phone.replace(/\D/g, '') + '@s.whatsapp.net';
+// --- API تسجيل الدخول ---
+app.post('/api/login', async (req, res) => {
+    const { phone, password, role } = req.body;
 
-        // حفظ/تحديث بيانات العميل
-        await usersCollection.doc(jid).set({
-            name: customer_name,
-            whatsappJid: jid,
-            lastOrder: { product: product_name, date: new Date() }
-        }, { merge: true });
-
-        // جلب بيانات المستخدم
-        const userDoc = await usersCollection.doc(jid).get();
-        const userData = userDoc.exists ? userDoc.data() : {};
-
-        // القالب
-        let template = userData.messageTemplate || "مرحباً {name} 👋\nطلبك لمنتج {product} تم استلامه ✅";
-        let message = template.replace(/\{name\}/g, customer_name).replace(/\{product\}/g, product_name);
-
-        if (sock) await sock.sendMessage(jid, { text: message });
-
-        res.json({ success: true, message: "Order processed" });
-    } catch (err) {
-        console.error("Webhook error:", err);
-        res.status(500).json({ error: "Failed to process order" });
+    if (role === 'admin') {
+        if (phone === process.env.ADMIN_USER && password === process.env.ADMIN_PASS) {
+            req.session.user = { role: 'admin' };
+            return res.json({ success: true, role: 'admin' });
+        }
+        return res.status(401).json({ error: "Invalid admin credentials" });
     }
+
+    const jid = phone.replace(/\D/g, '') + '@s.whatsapp.net';
+    const doc = await usersCollection.doc(jid).get();
+    if (!doc.exists) return res.status(404).json({ error: "User not found" });
+
+    req.session.user = { role: 'user', jid };
+    res.json({ success: true, role: 'user' });
 });
 
-// --- API المستخدمين ---
-app.get('/api/users', async (req, res) => {
-    try {
-        const snapshot = await usersCollection.get();
-        const users = {};
-        snapshot.forEach(doc => users[doc.id] = doc.data());
-        res.json(users);
-    } catch (err) {
-        res.status(500).json({ error: "Failed to get users" });
-    }
+// --- API للمستخدم ---
+app.get('/me', requireLogin("user"), async (req, res) => {
+    const jid = req.session.user.jid;
+    const doc = await usersCollection.doc(jid).get();
+    if (!doc.exists) return res.status(404).json({ error: "User not found" });
+    res.json(doc.data());
 });
 
-app.post('/api/users', async (req, res) => {
+app.get('/me/stats', requireLogin("user"), async (req, res) => {
+    const jid = req.session.user.jid;
+    const uptime = Math.floor((Date.now() - startTime.getTime()) / 1000);
+    const webhookUrl = `${req.protocol}://${req.get('host')}/webhook/${encodeURIComponent(jid)}`;
+
+    res.json({
+        connectionStatus,
+        hasQR: !!qrCode,
+        qrImage: qrCode ? `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrCode)}` : null,
+        uptimeSeconds: uptime,
+        sentMessages: sentMessagesCount,
+        webhookUrl
+    });
+});
+
+// Webhook لاستقبال الطلبات
+app.post('/webhook/:jid', async (req, res) => {
+    const jid = req.params.jid;
+    const { message } = req.body;
     try {
-        const { name, phone, status, endDate } = req.body;
-        const jid = phone.replace(/\D/g, '') + '@s.whatsapp.net';
-
-        await usersCollection.doc(jid).set({
-            name,
-            whatsappJid: jid,
-            subscription: {
-                status,
-                endDate: new Date(endDate)
-            }
-        }, { merge: true });
-
+        await sock.sendMessage(jid, { text: message });
+        sentMessagesCount++;
         res.json({ success: true });
     } catch (err) {
-        res.status(500).json({ error: "Failed to save user" });
+        console.error("Webhook send error:", err);
+        res.status(500).json({ error: "Failed to send message" });
     }
 });
 
-app.post('/api/template', async (req, res) => {
-    try {
-        const { phone, template } = req.body;
-        const jid = phone.replace(/\D/g, '') + '@s.whatsapp.net';
-
-        await usersCollection.doc(jid).set({ messageTemplate: template }, { merge: true });
-        res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ error: "Failed to save template" });
-    }
+// --- API الإدارة ---
+app.get('/api/users', requireLogin("admin"), async (req, res) => {
+    const snapshot = await usersCollection.get();
+    const users = {};
+    snapshot.forEach(doc => users[doc.id] = doc.data());
+    res.json(users);
 });
 
-// --- صفحات HTML للعرض ---
-app.get('/user', async (req, res) => {
-    try {
-        const snapshot = await usersCollection.get();
-        let rows = '';
-        snapshot.forEach(doc => {
-            const u = doc.data();
-            rows += `
-                <tr>
-                    <td>${u.name || '-'}</td>
-                    <td>${u.whatsappJid}</td>
-                    <td>${u.subscription?.status || '-'}</td>
-                    <td>${u.subscription?.endDate?.toDate ? u.subscription.endDate.toDate().toLocaleDateString('ar-EG') : '-'}</td>
-                    <td>${u.messageTemplate || '-'}</td>
-                </tr>`;
-        });
+app.post('/api/users', requireLogin("admin"), async (req, res) => {
+    const { name, phone, status, days } = req.body;
+    const jid = phone.replace(/\D/g, '') + '@s.whatsapp.net';
 
-        res.send(`
-            <html lang="ar" dir="rtl">
-            <head>
-                <meta charset="UTF-8">
-                <title>لوحة المستخدمين</title>
-                <style>
-                    body { font-family: sans-serif; background: #f4f6f9; padding: 20px; }
-                    table { border-collapse: collapse; width: 100%; background: white; }
-                    th, td { border: 1px solid #ddd; padding: 10px; }
-                    th { background: #667eea; color: white; }
-                </style>
-            </head>
-            <body>
-                <h2>📋 قائمة المستخدمين</h2>
-                <table>
-                    <tr><th>الاسم</th><th>الرقم</th><th>الحالة</th><th>انتهاء الاشتراك</th><th>القالب</th></tr>
-                    ${rows}
-                </table>
-            </body>
-            </html>
-        `);
-    } catch (err) {
-        res.status(500).send("فشل تحميل المستخدمين");
-    }
+    const endDate = new Date();
+    endDate.setDate(endDate.getDate() + parseInt(days || 30));
+
+    await usersCollection.doc(jid).set({
+        name,
+        whatsappJid: jid,
+        subscription: {
+            status,
+            endDate
+        }
+    }, { merge: true });
+    res.json({ success: true });
 });
 
-app.get('/admin', (req, res) => {
-    res.send("<h2>لوحة الإدارة</h2><p>هنا هتضيف واجهة التحكم قريباً 🚀</p>");
+app.post('/api/template', requireLogin("admin"), async (req, res) => {
+    const { phone, template } = req.body;
+    const jid = phone.replace(/\D/g, '') + '@s.whatsapp.net';
+    await usersCollection.doc(jid).set({ messageTemplate: template }, { merge: true });
+    res.json({ success: true });
 });
 
-// --- QR و حالة السيرفر ---
-app.get('/api/status', (req, res) => res.json({ status: connectionStatus, hasQR: !!qrCode }));
-app.get('/api/qr', (req, res) => {
-    if (qrCode) {
-        res.json({ qr: qrCode, image: `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrCode)}` });
-    } else res.json({ status: connectionStatus });
-});
+// --- الصفحات ---
+app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
+app.get('/user', (req, res) => res.sendFile(path.join(__dirname, 'public', 'user.html')));
+
+// --- 404 ---
+app.use('*', (req, res) => res.status(404).json({ error: 'Not Found' }));
 
 // --- تشغيل ---
-async function main() {
+(async () => {
     await startWhatsApp();
     const PORT = process.env.PORT || 3000;
-    app.listen(PORT, () => console.log(`🚀 Server running on http://0.0.0.0:${PORT}`));
-}
-main();
+    app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server running at http://0.0.0.0:${PORT}`));
+})();
