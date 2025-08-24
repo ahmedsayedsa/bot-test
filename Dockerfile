@@ -1,5 +1,5 @@
-# استخدام Node.js الرسمي
-FROM node:18-slim
+# استخدام Node.js الرسمي - تحديث لإصدار 20
+FROM node:20-slim
 
 # إعداد مجلد العمل
 WORKDIR /app
@@ -17,10 +17,10 @@ COPY . .
 RUN mkdir -p auth_info_session
 
 # تعيين المنفذ
-EXPOSE 8080
+EXPOSE 5000
 
 # متغير البيئة للمنفذ
-ENV PORT=8080
+ENV PORT=5000
 
 # تشغيل التطبيق
 CMD ["npm", "start"]
