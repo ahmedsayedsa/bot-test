@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>لوحة تحكم المشتركين</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <h1>لوحة تحكم المشتركين</h1>
+
+    <div class="form-section">
+        <h2>إضافة أو تحديث مستخدم</h2>
+        <form id="userForm">
+            <input type="text" id="name" placeholder="اسم المستخدم" required>
+            <input type="text" id="phone" placeholder="رقم الواتساب (مثال: 201001234567)" required>
+            <select id="status" required>
+                <option value="active">فعال (Active)</option>
+                <option value="expired">منتهي (Expired)</option>
+            </select>
+            <input type="date" id="endDate" placeholder="تاريخ الانتهاء" required>
+            <button type="submit">حفظ التغييرات</button>
+        </form>
+    </div>
+
+    <h2>قائمة المستخدمين</h2>
+    <table id="usersTable">
+        <thead>
+            <tr>
+                <th>الاسم</th>
+                <th>رقم الواتساب</th>
+                <th>حالة الاشتراك</th>
+                <th>تاريخ الانتهاء</th>
+                <th>إجراءات</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <script>
+        const usersTableBody = document.querySelector('#usersTable tbody');
+        const userForm = document.getElementById('userForm');
+        const nameInput = document.getElementById('name');
+        const phoneInput = document.getElementById('phone');
+        const statusInput = document.getElementById('status');
+        const endDateInput = document.getElementById('endDate');
+
+        async function fetchUsers() {
+            const response = await fetch('/api/users');
+            const users = await response.json();
+            usersTableBody.innerHTML = '';
+            for (const userId in users) {
+                const user = users[userId];
+                const sub = user.subscription || {};
+                const endDate = sub.endDate ? new Date(sub.endDate).toLocaleDateString('ar-EG') : 'N/A';
+                const row = `
+                    <tr>
+                        <td>${user.name}</td>
+                        <td>${user.whatsappJid}</td>
+                        <td>${sub.status || 'N/A'}</td>
+                        <td>${endDate}</td>
+                        <td><button class="edit-btn" onclick="editUser('${userId}')">تعديل</button></td>
+                    </tr>
+                `;
+                usersTableBody.innerHTML += row;
+            }
+        }
+
+        async function editUser(userId) {
+            const response = await fetch('/api/users');
+            const users = await response.json();
+            const user = users[userId];
+            nameInput.value = user.name;
+            phoneInput.value = user.whatsappJid.split('@')[0];
+            statusInput.value = user.subscription.status;
+            endDateInput.value = user.subscription.endDate ? user.subscription.endDate.split('T')[0] : '';
+        }
+
+        userForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const userData = {
+                name: nameInput.value,
+                phone: phoneInput.value,
+                status: statusInput.value,
+                endDate: endDateInput.value
+            };
+            await fetch('/api/users', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(userData)
+            });
+            userForm.reset();
+            fetchUsers();
+        });
+
+        fetchUsers();
+    </script>
+</body>
+</html>

@@ -1,81 +1,34 @@
-const express = require('express');
-const fs = require('fs');
-const path = require('path');
+import express from "express";
+import { Firestore } from "@google-cloud/firestore";
+
 const router = express.Router();
+const firestore = new Firestore();
+const usersCollection = firestore.collection("users");
 
-const PASSWORD = "Qwe@123456"; // غير كلمة السر
-
-// تحميل قاعدة البيانات
-const loadClients = () => {
-  if (!fs.existsSync('clients.json')) return {};
-  return JSON.parse(fs.readFileSync('clients.json'));
-};
-
-const saveClients = (data) => {
-  fs.writeFileSync('clients.json', JSON.stringify(data, null, 2));
-};
-
-// Middleware لحماية الأدمن
-router.use((req, res, next) => {
-  if (req.query.pass !== PASSWORD && req.path !== '/login' && req.path !== '/doLogin') {
-    return res.redirect(`/admin/login`);
-  }
-  next();
+// صفحة HTML بسيطة
+router.get("/", (req, res) => {
+  res.send(`
+    <h2>لوحة التحكم - Admin</h2>
+    <form method="post" action="/admin/create">
+      رقم العميل: <input name="jid" /><br/>
+      الاسم: <input name="name" /><br/>
+      مدة الاشتراك (أيام): <input name="days" type="number" /><br/>
+      <button type="submit">إضافة اشتراك</button>
+    </form>
+  `);
 });
 
-// صفحة تسجيل الدخول
-router.get('/login', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'login.html'));
-});
-
-// التحقق من الباسورد
-router.get('/doLogin', (req, res) => {
-  if (req.query.pass === PASSWORD) {
-    res.redirect(`/admin?pass=${PASSWORD}`);
-  } else {
-    res.send("❌ Wrong password");
-  }
-});
-
-// لوحة التحكم الرئيسية
-router.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
-});
-
-// API: جلب العملاء
-router.get('/list', (req, res) => {
-  res.json(loadClients());
-});
-
-// API: إضافة / تعديل عميل
-router.post('/save', express.urlencoded({ extended: true }), (req, res) => {
-  const { id, name, message, days } = req.body;
-  if (!id || !name) return res.send("❌ Missing parameters");
-
-  const clients = loadClients();
-  const expiry = new Date();
-  expiry.setDate(expiry.getDate() + Number(days || 30));
-
-  clients[id] = {
+// إنشاء عميل جديد
+router.post("/create", async (req, res) => {
+  const { jid, name, days } = req.body;
+  const endDate = new Date();
+  endDate.setDate(endDate.getDate() + parseInt(days || 3)); // افتراضي 3 أيام
+  await usersCollection.doc(jid).set({
     name,
-    message: message || "شكراً لطلبك 🎉",
-    expiry: expiry.toISOString()
-  };
-
-  saveClients(clients);
-  res.redirect(`/admin?pass=${PASSWORD}`);
+    subscription: { status: "active", endDate: endDate.toISOString() },
+    message: "شكراً لاختيارك خدمتنا!",
+  });
+  res.send("✅ تم إنشاء العميل");
 });
 
-// API: تنزيل CSV
-router.get('/export', (req, res) => {
-  const clients = loadClients();
-  let csv = "ClientID,Name,Message,Expiry\n";
-  for (let id in clients) {
-    csv += `${id},${clients[id].name},${clients[id].message},${clients[id].expiry}\n`;
-  }
-  res.header('Content-Type', 'text/csv');
-  res.attachment('clients.csv');
-  res.send(csv);
-});
-
-module.exports = router;
+export default router;
