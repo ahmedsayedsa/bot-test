@@ -1,20 +1,26 @@
-# Use Node.js LTS
-FROM node:18
+# استخدام Node.js الرسمي
+FROM node:18-slim
 
-# Set working directory
-WORKDIR /usr/src/app
+# إعداد مجلد العمل
+WORKDIR /app
 
-# Copy package files
+# نسخ ملفات package
 COPY package*.json ./
 
-# Install dependencies
+# تثبيت المكتبات
 RUN npm install --production
 
-# Copy the rest of the code INCLUDING views/
+# نسخ باقي الملفات
 COPY . .
 
-# Expose the port
-EXPOSE 3000
+# إنشاء مجلد auth مسبقاً
+RUN mkdir -p auth_info_session
 
-# Start app
-CMD ["node", "index.js"]
+# تعيين المنفذ
+EXPOSE 8080
+
+# متغير البيئة للمنفذ
+ENV PORT=8080
+
+# تشغيل التطبيق
+CMD ["npm", "start"]
